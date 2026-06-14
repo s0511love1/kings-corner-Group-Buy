@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>King's Corner 逢國食品 菜單</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+:root{
+  --gold:#C9A84C;--gold-dark:#8A6E2A;--gold-light:#FDF6E3;
+  --dark:#12100E;--dark2:#1E1B17;--dark3:#2A2620;
+  --border:#E8E0D4;--bg:#F7F3EE;--white:#fff;
+  --text:#1A1208;--muted:#7A6E64;--faint:#B0A898;
+  --red:#C8272D;--green:#2E6644;
+  --radius:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+
+/* HEADER */
+.header{background:var(--dark);position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,0.4)}
+.header-inner{max-width:960px;margin:0 auto;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:52px}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:3px;color:var(--gold)}
+.logo small{font-family:'Noto Sans TC',sans-serif;font-size:11px;letter-spacing:1px;color:#9A9088;font-weight:400;margin-left:6px}
+.header-right{display:flex;align-items:center;gap:10px}
+.search-box{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:6px 14px 6px 32px;font-size:13px;color:#fff;font-family:'Noto Sans TC',sans-serif;outline:none;width:180px;transition:all 0.2s;position:relative}
+.search-box::placeholder{color:#9A9088}
+.search-box:focus{background:rgba(255,255,255,0.12);border-color:var(--gold);width:220px}
+.search-wrap{position:relative}
+.search-wrap::before{content:'🔍';position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:12px;pointer-events:none}
+
+/* CATEGORY TABS */
+.cat-bar{background:var(--dark2);border-bottom:1px solid #2a2620;position:sticky;top:52px;z-index:90}
+.cat-tabs{max-width:960px;margin:0 auto;display:flex;overflow-x:auto;padding:0 12px;scrollbar-width:none;gap:0}
+.cat-tabs::-webkit-scrollbar{display:none}
+.cat-tab{flex-shrink:0;padding:12px 16px;font-size:12px;font-weight:700;color:#9A9088;cursor:pointer;border-bottom:3px solid transparent;transition:all 0.15s;white-space:nowrap;font-family:'Noto Sans TC',sans-serif}
+.cat-tab:hover{color:#F0EBE0}
+.cat-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.cat-count{font-size:10px;background:rgba(255,255,255,0.1);border-radius:10px;padding:1px 6px;margin-left:4px}
+.cat-tab.active .cat-count{background:rgba(201,168,76,0.2);color:var(--gold)}
+
+/* MAIN */
+.main{max-width:960px;margin:0 auto;padding:20px 16px 60px}
+
+/* SECTION */
+.section-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid var(--dark)}
+.section-hd h2{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:var(--dark)}
+.section-count{font-size:11px;color:var(--muted);background:var(--dark3)3a;padding:3px 10px;border-radius:20px;border:1px solid var(--border)}
+
+/* PRODUCT GRID */
+.prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:32px}
+.prod-card{background:var(--white);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;transition:box-shadow 0.15s,transform 0.15s}
+.prod-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.1);transform:translateY(-2px)}
+.prod-card-top{padding:14px 16px 10px;border-bottom:1px solid #f0ece8}
+.prod-name{font-size:14px;font-weight:700;color:var(--text);line-height:1.4;margin-bottom:4px}
+.prod-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.prod-tag{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:700}
+.tag-origin{background:#f0f7ff;color:#1a5fa8;border:1px solid #c8dcf5}
+.tag-spec{background:#f7f3ee;color:var(--muted);border:1px solid var(--border)}
+.tag-note{background:#fff8e6;color:var(--gold-dark);border:1px solid #ffe0a0}
+
+/* Price block */
+.prod-prices{display:flex;align-items:flex-end;gap:12px;padding:10px 16px}
+.price-item{display:flex;flex-direction:column;align-items:center}
+.price-label{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--faint);margin-bottom:2px}
+.price-val{font-family:'Bebas Neue',sans-serif;font-size:22px;line-height:1}
+.price-sale{color:var(--red)}
+.price-retail{color:var(--muted);font-size:16px;text-decoration:line-through}
+.price-cost{color:var(--faint);font-size:14px}
+.price-divider{width:1px;background:var(--border);height:32px;align-self:center}
+.saving-badge{margin-left:auto;background:var(--red);color:white;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap}
+
+/* SEARCH RESULTS */
+.search-results-banner{background:var(--gold-light);border:1px solid #e8d090;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--gold-dark);display:none}
+.search-results-banner.show{display:block}
+
+/* EMPTY */
+.empty-state{text-align:center;padding:60px 24px;color:var(--muted)}
+.empty-state .ei{font-size:48px;margin-bottom:12px}
+
+/* FLOAT STATS */
+.float-bar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--dark);color:#F0EBE0;border-radius:30px;padding:10px 20px;font-size:12px;display:flex;gap:16px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,0.4);z-index:200;border:1px solid var(--border)}
+.fb-item{display:flex;flex-direction:column;align-items:center}
+.fb-val{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--gold);line-height:1}
+.fb-label{font-size:9px;color:#9A9088;text-transform:uppercase;letter-spacing:1px}
+.fb-div{width:1px;height:28px;background:#3a3630}
+
+@media(max-width:600px){
+  .prod-grid{grid-template-columns:1fr}
+  .search-box{width:140px}.search-box:focus{width:160px}
+  .float-bar{bottom:8px;padding:8px 14px;gap:10px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="logo">King's Corner <small>逢國食品 菜單</small></div>
+    <div class="header-right">
+      <div class="search-wrap">
+        <input class="search-box" type="text" id="search-input" placeholder="搜尋商品…" oninput="doSearch()">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cat-bar">
+  <div class="cat-tabs" id="cat-tabs"></div>
+</div>
+
+<div class="main">
+  <div class="search-results-banner" id="search-banner"></div>
+  <div id="content"></div>
+</div>
+
+<div class="float-bar" id="float-bar">
+  <div class="fb-item"><div class="fb-val" id="fb-cats">13</div><div class="fb-label">分類</div></div>
+  <div class="fb-div"></div>
+  <div class="fb-item"><div class="fb-val" id="fb-total">112</div><div class="fb-label">品項</div></div>
+  <div class="fb-div"></div>
+  <div class="fb-item"><div class="fb-val" id="fb-showing">112</div><div class="fb-label">顯示中</div></div>
+</div>
+
+<script>
+const FENGUO_PRODUCTS = {
+  "RICHY": [
+    {name:"瑞奇 迷你一口燕麥酥40G",spec:"40G",origin:"越南",cost:28,sale:35,retail:49,note:""},
+    {name:"瑞奇 起司迷你一口燕麥酥35G",spec:"35G",origin:"越南",cost:28,sale:35,retail:49,note:""},
+    {name:"瑞奇 迷你一口燕麥酥-巧克力風味 32G",spec:"32G",origin:"越南",cost:28,sale:35,retail:49,note:""},
+    {name:"瑞奇 迷你一口燕麥酥250G",spec:"250G",origin:"越南",cost:98,sale:119,retail:159,note:""},
+    {name:"瑞奇 起司迷你一口燕麥酥220G",spec:"220G",origin:"越南",cost:98,sale:119,retail:159,note:""},
+    {name:"瑞奇 蜂蜜韓式醬味米果168G",spec:"168G",origin:"越南",cost:60,sale:69,retail:170,note:""},
+    {name:"瑞奇 富裕華芙奶油餅 270g",spec:"270G",origin:"越南",cost:69,sale:170,retail:170,note:"買一送一"},
+    {name:"瑞奇 蔬菜餅192G",spec:"192G",origin:"越南",cost:64,sale:69,retail:170,note:""},
+    {name:"瑞奇 海老風味餅乾 192g",spec:"192G",origin:"越南",cost:64,sale:69,retail:170,note:""},
+    {name:"瑞奇 富裕滿月米餅(135G x 20)",spec:"135G",origin:"越南",cost:64,sale:49,retail:69,note:""},
+    {name:"瑞奇 富裕米果 鹽烤風味134.4G",spec:"134.4G",origin:"越南",cost:60,sale:69,retail:99,note:""},
+    {name:"瑞奇 富裕米果 玫瑰鹽風味134.4G",spec:"134.4G",origin:"越南",cost:60,sale:69,retail:99,note:""},
+    {name:"富裕 巧克力風味餅乾棒 400G",spec:"400G",origin:"越南",cost:127,sale:149,retail:209,note:""},
+    {name:"富裕 草莓風味餅乾棒 400G",spec:"400G",origin:"越南",cost:127,sale:149,retail:209,note:""},
+    {name:"瑞奇 富裕 香草牛奶風味餅乾棒 400G",spec:"400G",origin:"越南",cost:127,sale:149,retail:209,note:""},
+    {name:"瑞奇 爆漿捲心三兄弟 巧克力風味 440G",spec:"440G",origin:"越南",cost:115,sale:139,retail:168,note:""},
+    {name:"瑞奇 爆漿捲心三兄弟 香草風味 440G",spec:"440G",origin:"越南",cost:115,sale:139,retail:168,note:""},
+    {name:"瑞奇 爆漿捲心三兄弟 草莓風味 440G",spec:"440G",origin:"越南",cost:115,sale:139,retail:168,note:""},
+    {name:"瑞奇 巧克力風味餅乾棒 22Gx10盒/組",spec:"220G",origin:"越南",cost:98,sale:119,retail:149,note:""},
+    {name:"瑞奇 草莓風味餅乾棒 22Gx10盒/組",spec:"220G",origin:"越南",cost:98,sale:119,retail:149,note:""},
+  ],
+  "韓國CJ": [
+    {name:"CJ BIBIGO 芝麻油160ML",spec:"160ml",origin:"韓國",cost:133,sale:169,retail:239,note:""},
+    {name:"CJ BIBIGO 芝麻油500ML",spec:"500ml",origin:"韓國",cost:230,sale:299,retail:399,note:""},
+    {name:"CJ BIBIGO 韓式頂級燒烤拌醬-原味290G",spec:"290G",origin:"韓國",cost:79,sale:99,retail:129,note:""},
+    {name:"CJ 辣椒醬200G",spec:"200g",origin:"韓國",cost:58,sale:69,retail:99,note:""},
+    {name:"CJ 辣椒醬500G",spec:"500g",origin:"韓國",cost:121,sale:149,retail:219,note:""},
+    {name:"CJ 白雪韓式冬粉80G",spec:"80g",origin:"韓國",cost:29,sale:39,retail:55,note:""},
+    {name:"韓國CJ 午餐肉 340g",spec:"340G",origin:"韓國",cost:104,sale:129,retail:199,note:""},
+    {name:"韓國CJ石榴美醋飲 350ml",spec:"350ML",origin:"韓國",cost:64,sale:89,retail:99,note:""},
+    {name:"韓國CJ白葡萄美醋飲 350ml",spec:"350ML",origin:"韓國",cost:64,sale:89,retail:99,note:""},
+  ],
+  "王麵河粉": [
+    {name:"王麵河粉 雞絲風味",spec:"61g",origin:"越南",cost:26,sale:59,retail:59,note:"買一送一"},
+    {name:"王麵河粉 熟牛肉風味61g",spec:"61g",origin:"越南",cost:26,sale:59,retail:59,note:"買一送一"},
+    {name:"王麵河粉 酸辣蝦湯風味61g",spec:"61g",origin:"越南",cost:26,sale:59,retail:59,note:"買一送一"},
+    {name:"王麵河粉野菜風味61g",spec:"61g",origin:"越南",cost:26,sale:59,retail:59,note:"買一送一"},
+    {name:"泰國 特級酸辣蝦味麵95G",spec:"95G",origin:"泰國",cost:19,sale:21,retail:25,note:""},
+  ],
+  "海士": [
+    {name:"海士 新加坡肉骨茶風味醬120g",spec:"120G",origin:"新加坡",cost:81,sale:99,retail:139,note:""},
+    {name:"海士 新加坡辣椒螃蟹風味醬150g",spec:"150G",origin:"新加坡",cost:115,sale:149,retail:189,note:""},
+  ],
+  "中國冬粉": [
+    {name:"韓國不倒翁（OTTOGI）韓式正Q冬粉 500G",spec:"500G",origin:"中國",cost:92,sale:129,retail:159,note:""},
+  ],
+  "調味品": [
+    {name:"A1牛排醬 280G",spec:"280G",origin:"台灣",cost:75,sale:109,retail:139,note:""},
+    {name:"韓國海苔芝麻香鬆 120G",spec:"120G",origin:"韓國",cost:115,sale:139,retail:179,note:""},
+    {name:"韓國海苔芝麻香鬆(辣味) 120G",spec:"120G",origin:"韓國",cost:115,sale:139,retail:179,note:""},
+    {name:"韓國海苔芝麻香鬆(柴魚口味) 120G",spec:"120G",origin:"韓國",cost:115,sale:139,retail:179,note:""},
+    {name:"YOSHI-E 100%酪梨油 250ml",spec:"250ML",origin:"荷蘭",cost:196,sale:499,retail:499,note:"買一送一"},
+    {name:"坎佩娜-特級初榨純橄欖油250ml",spec:"250ML",origin:"義大利",cost:180,sale:199,retail:249,note:""},
+    {name:"新加坡大華-特級純釀造醬油(老抽)",spec:"305ml",origin:"新加坡",cost:92,sale:119,retail:149,note:""},
+    {name:"新加坡大華-純釀造醬油(老抽)",spec:"640ml",origin:"新加坡",cost:92,sale:119,retail:149,note:""},
+    {name:"新加坡大華-特級純釀造淡醬油(生抽)",spec:"305ml",origin:"新加坡",cost:92,sale:119,retail:149,note:""},
+    {name:"新加坡大華-純釀造淡醬油(生抽)",spec:"640ml",origin:"新加坡",cost:92,sale:119,retail:149,note:""},
+    {name:"印度咖哩粉 110gx12",spec:"110g",origin:"台灣",cost:52,sale:69,retail:89,note:""},
+  ],
+  "餅乾": [
+    {name:"韓國 蜜糖米香餅 110g",spec:"110g",origin:"韓國",cost:61,sale:69,retail:99,note:""},
+    {name:"韓國 蜜糖麥香餅 110g",spec:"110g",origin:"韓國",cost:61,sale:69,retail:99,note:""},
+    {name:"CROWN 原味營養餅200g",spec:"200g",origin:"韓國",cost:64,sale:69,retail:85,note:""},
+    {name:"CROWN 原味蘇打餅149g",spec:"149g",origin:"韓國",cost:64,sale:69,retail:85,note:""},
+    {name:"Yu-Ki可可風味喜馬拉雅鹽夾心餅152g",spec:"152g",origin:"馬來西亞",cost:52,sale:59,retail:69,note:""},
+    {name:"YUKI 起司夾心餅乾 150g",spec:"150g",origin:"馬來西亞",cost:52,sale:59,retail:69,note:""},
+    {name:"YUKI 花生夾心餅乾150g",spec:"150g",origin:"馬來西亞",cost:52,sale:59,retail:69,note:""},
+    {name:"YUKI 巧克力夾心餅乾150g",spec:"150g",origin:"馬來西亞",cost:52,sale:59,retail:69,note:""},
+    {name:"YUKI 檸檬夾心餅乾 150g",spec:"150g",origin:"馬來西亞",cost:52,sale:59,retail:69,note:""},
+    {name:"CROWN 巧克力派 300g",spec:"300g",origin:"韓國",cost:75,sale:89,retail:109,note:""},
+    {name:"愛炫 三明治(巧克力)160g x18",spec:"160g",origin:"印尼",cost:40,sale:59,retail:69,note:""},
+    {name:"愛炫 三明治(起司) 160g x18",spec:"160g",origin:"印尼",cost:40,sale:59,retail:69,note:""},
+    {name:"愛炫 三明治(檸檬) 160G x18",spec:"160g",origin:"印尼",cost:40,sale:59,retail:69,note:""},
+    {name:"愛炫 三明治(鹹蛋黃口味) 160g x18",spec:"160g",origin:"印尼",cost:40,sale:59,retail:69,note:""},
+    {name:"SKYFLAKES 空中霸王鮮奶油風味夾心餅乾150G",spec:"150G",origin:"菲律賓",cost:41,sale:99,retail:99,note:"買一送一"},
+    {name:"SKYFLAKES 空中霸王甜奶風味夾心餅乾150G",spec:"150G",origin:"菲律賓",cost:41,sale:99,retail:99,note:"買一送一"},
+    {name:"My Motto提拉米蘇風味威化餅30G",spec:"30G",origin:"保加利亞",cost:19,sale:25,retail:39,note:""},
+    {name:"My Motto雙重巧克力風味威化餅30G",spec:"30G",origin:"保加利亞",cost:19,sale:25,retail:39,note:""},
+    {name:"MY  Motto 香草風味牛奶威化餅30G",spec:"30G",origin:"保加利亞",cost:19,sale:25,retail:39,note:""},
+    {name:"MY  Motto 歐式草莓風味威化餅30G",spec:"30G",origin:"保加利亞",cost:19,sale:25,retail:39,note:""},
+  ],
+  "特規專區": [
+    {name:"My Motto提拉米蘇風味威化餅30G*20",spec:"30G*20",origin:"保加利亞",cost:368,sale:499,retail:780,note:""},
+    {name:"My Motto雙重巧克力風味威化餅30G*20",spec:"30G*20",origin:"保加利亞",cost:368,sale:499,retail:780,note:""},
+    {name:"MY  Motto 香草風味牛奶威化餅30G*20",spec:"30G*20",origin:"保加利亞",cost:368,sale:499,retail:780,note:""},
+    {name:"MY  Motto 歐式草莓風味威化餅30G*20",spec:"30G*20",origin:"保加利亞",cost:368,sale:499,retail:780,note:""},
+    {name:"泰國 特級酸辣蝦味麵95G*24",spec:"95G*24",origin:"泰國",cost:437,sale:499,retail:599,note:""},
+    {name:"瑞奇 迷你一口燕麥酥1000G",spec:"1000G",origin:"越南",cost:322,sale:459,retail:539,note:""},
+  ],
+  "糖果": [
+    {name:"日本黃金糖470g",spec:"470g",origin:"日本",cost:299,sale:359,retail:449,note:""},
+    {name:"BF 海鹽檸檬糖 128g",spec:"128g",origin:"馬來西亞",cost:46,sale:55,retail:65,note:""},
+    {name:"BF 薄荷岩鹽檸檬糖  128g",spec:"128g",origin:"馬來西亞",cost:46,sale:55,retail:65,note:""},
+    {name:"BF 薄荷岩鹽沙士風味糖128g",spec:"128g",origin:"馬來西亞",cost:46,sale:55,retail:65,note:""},
+    {name:"Big Top馬來西亞-水蜜桃薄荷味鹽糖 100G",spec:"100g",origin:"馬來西亞",cost:40,sale:55,retail:69,note:""},
+    {name:"BIG TOP-柚香薄荷味鹽糖 100G",spec:"100g",origin:"馬來西亞",cost:40,sale:55,retail:69,note:""},
+  ],
+  "傳統零食": [
+    {name:"YOSHI-E越南鹽味帶皮腰果 380G",spec:"380g",origin:"越南",cost:190,sale:239,retail:299,note:""},
+    {name:"逢國 台灣 原味桃酥 180g",spec:"180g",origin:"台灣",cost:40,sale:99,retail:99,note:"買一送一"},
+    {name:"逢國 台灣 杏仁桃酥 180g",spec:"180g",origin:"台灣",cost:40,sale:99,retail:99,note:"買一送一"},
+    {name:"黃金口福 手工堅果黑糖沙琪瑪 420g",spec:"420g",origin:"台灣",cost:92,sale:119,retail:139,note:""},
+    {name:"黃金口福 手工雪花堅果沙琪瑪 420g",spec:"420g",origin:"台灣",cost:92,sale:119,retail:139,note:""},
+  ],
+  "飲品": [
+    {name:"韓國 蜂蜜 柚子茶 1KG",spec:"1KG",origin:"韓國",cost:242,sale:299,retail:399,note:""},
+    {name:"韓國 蜂蜜 檸檬茶 1KG",spec:"1KG",origin:"韓國",cost:242,sale:299,retail:399,note:""},
+    {name:"韓國蜂蜜 百香果茶 1KG",spec:"1KG",origin:"韓國",cost:242,sale:299,retail:399,note:""},
+    {name:"香港金山牌-特濃杏仁霜 300G",spec:"300G",origin:"香港",cost:115,sale:149,retail:299,note:""},
+    {name:"香港金山牌-即溶杏仁霜 350G",spec:"350G",origin:"香港",cost:115,sale:149,retail:299,note:""},
+    {name:"ESKA 愛斯卡加拿大天然冰川水 ( 1000mlx12 )",spec:"1000ML",origin:"加拿大",cost:42,sale:59,retail:69,note:""},
+    {name:"ESKA 愛斯卡加拿大天然冰川水 ( 500mlx24 )",spec:"500ML",origin:"加拿大",cost:27,sale:39,retail:49,note:""},
+    {name:"ESKA 愛斯卡加拿大天然冰川水 ( 330mlx24",spec:"330ML",origin:"加拿大",cost:26,sale:35,retail:39,note:""},
+    {name:"SAKI 水蜜桃果汁 ( 180mlx30 )",spec:"180ml",origin:"韓國",cost:22,sale:25,retail:29,note:""},
+    {name:"SAKI 清涼脫脂乳飲料 ( 250mlx30 )",spec:"250ml",origin:"韓國",cost:22,sale:25,retail:29,note:""},
+    {name:"SAKI 番茄汁 ( 180mlx30 )",spec:"180ml",origin:"韓國",cost:22,sale:25,retail:29,note:""},
+  ],
+  "海底撈": [
+    {name:"海底撈 清湯湯底",spec:"110g",origin:"中國",cost:75,sale:98,retail:128,note:""},
+    {name:"海底撈 清油鍋底",spec:"220g",origin:"中國",cost:75,sale:98,retail:128,note:""},
+    {name:"筷手小廚 麻辣香鍋調味料",spec:"220g",origin:"中國",cost:75,sale:98,retail:128,note:""},
+    {name:"海底撈 上湯三鮮 鍋底",spec:"200g",origin:"中國",cost:75,sale:98,retail:128,note:""},
+    {name:"海底撈 酸香番茄鍋底",spec:"200g",origin:"中國",cost:75,sale:98,retail:128,note:""},
+    {name:"海底撈 菌湯湯底",spec:"150g",origin:"中國",cost:75,sale:98,retail:128,note:""},
+    {name:"海底撈-冬陰功泰式鍋底",spec:"210g",origin:"中國",cost:75,sale:98,retail:128,note:""},
+    {name:"海底撈 酸辣牛肉冬粉",spec:"141G",origin:"台灣組裝",cost:75,sale:89,retail:109,note:""},
+    {name:"海底撈 番茄牛肉冬粉",spec:"146G",origin:"台灣組裝",cost:75,sale:89,retail:109,note:""},
+  ],
+  "衛龍魔芋爽": [
+    {name:"魔芋爽-香辣素毛肚 50G",spec:"50G",origin:"中國",cost:46,sale:59,retail:79,note:""},
+    {name:"魔芋爽-麻辣素毛肚50G",spec:"50G",origin:"中國",cost:46,sale:59,retail:79,note:""},
+    {name:"魔芋爽-酸辣泡椒素毛肚50G",spec:"50G",origin:"中國",cost:46,sale:59,retail:79,note:""},
+    {name:"魔芋爽-風吃海帶50G",spec:"50G",origin:"中國",cost:46,sale:59,retail:79,note:""},
+    {name:"魔芋爽-香辣素毛肚(盒裝) 18G*20包",spec:"18G*20包",origin:"中國",cost:219,sale:279,retail:400,note:""},
+    {name:"魔芋爽-香辣素毛肚(盒裝) 18G*20包",spec:"18G*20包",origin:"中國",cost:219,sale:279,retail:400,note:""},
+    {name:"魔芋爽-香辣素毛肚(盒裝) 18G*20包",spec:"18G*20包",origin:"中國",cost:219,sale:279,retail:400,note:""},
+  ],
+};
+const SHEET_EMOJI = {
+  'RICHY':'🍘', '韓國CJ':'🇰🇷', '王麵河粉':'🍜', '海士':'🦀',
+  '中國冬粉':'🍲', '調味品':'🧂', '餅乾':'🍪', '特規專區':'⭐',
+  '糖果':'🍬', '傳統零食':'🥜', '飲品':'🧃', '海底撈':'🍲',
+  '衛龍魔芋爽':'🌶️'
+};
+
+let currentCat = '__all__';
+let searchQuery = '';
+
+function init() {
+  buildCatTabs();
+  renderContent();
+}
+
+function buildCatTabs() {
+  const tabs = document.getElementById('cat-tabs');
+  const total = Object.values(FENGUO_PRODUCTS).reduce((s,a)=>s+a.length,0);
+  tabs.innerHTML = `<div class="cat-tab active" onclick="selectCat('__all__',this)">全部 <span class="cat-count">${total}</span></div>` +
+    Object.entries(FENGUO_PRODUCTS).map(([cat, prods]) =>
+      `<div class="cat-tab" onclick="selectCat('${cat}',this)">${SHEET_EMOJI[cat]||''} ${cat} <span class="cat-count">${prods.length}</span></div>`
+    ).join('');
+}
+
+function selectCat(cat, el) {
+  currentCat = cat;
+  searchQuery = '';
+  document.getElementById('search-input').value = '';
+  document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderContent();
+}
+
+function doSearch() {
+  searchQuery = document.getElementById('search-input').value.trim().toLowerCase();
+  currentCat = '__all__';
+  document.querySelectorAll('.cat-tab').forEach((t,i) => t.classList.toggle('active', i===0));
+  renderContent();
+}
+
+function renderContent() {
+  const content = document.getElementById('content');
+  const banner = document.getElementById('search-banner');
+  let html = '';
+  let totalShowing = 0;
+
+  const cats = currentCat === '__all__' ? Object.keys(FENGUO_PRODUCTS) : [currentCat];
+
+  for (const cat of cats) {
+    let prods = FENGUO_PRODUCTS[cat] || [];
+    if (searchQuery) {
+      prods = prods.filter(p => p.name.toLowerCase().includes(searchQuery) || p.spec.toLowerCase().includes(searchQuery) || p.origin.includes(searchQuery));
+    }
+    if (!prods.length) continue;
+    totalShowing += prods.length;
+
+    html += `
+      <div class="section-hd">
+        <h2>${SHEET_EMOJI[cat]||''} ${cat}</h2>
+        <span class="section-count">${prods.length} 項</span>
+      </div>
+      <div class="prod-grid">
+        ${prods.map(p => prodCardHtml(p)).join('')}
+      </div>`;
+  }
+
+  if (!html) {
+    html = `<div class="empty-state"><div class="ei">🔍</div><div>沒有找到「${searchQuery}」的商品</div></div>`;
+    banner.className = 'search-results-banner';
+  } else if (searchQuery) {
+    banner.innerHTML = `搜尋「<strong>${searchQuery}</strong>」：找到 ${totalShowing} 項商品`;
+    banner.className = 'search-results-banner show';
+  } else {
+    banner.className = 'search-results-banner';
+  }
+
+  content.innerHTML = html;
+  document.getElementById('fb-showing').textContent = totalShowing;
+}
+
+function prodCardHtml(p) {
+  const saving = p.retail && p.sale && p.retail > p.sale ? Math.round((1 - p.sale/p.retail)*100) : 0;
+  const saleDisplay = p.note === '買一送一' ? `${p.sale}<small style="font-size:11px;font-family:'Noto Sans TC',sans-serif;margin-left:3px">買一送一</small>` : p.sale;
+  return `<div class="prod-card">
+    <div class="prod-card-top">
+      <div class="prod-name">${p.name}</div>
+      <div class="prod-tags">
+        <span class="prod-tag tag-origin">🌍 ${p.origin}</span>
+        <span class="prod-tag tag-spec">📦 ${p.spec}</span>
+        ${p.note ? `<span class="prod-tag tag-note">🎁 ${p.note}</span>` : ''}
+      </div>
+    </div>
+    <div class="prod-prices">
+      <div class="price-item">
+        <div class="price-label">團購價</div>
+        <div class="price-val price-sale">$${saleDisplay}</div>
+      </div>
+      ${p.retail && p.retail !== p.sale ? `
+      <div class="price-divider"></div>
+      <div class="price-item">
+        <div class="price-label">末售</div>
+        <div class="price-val price-retail">$${p.retail}</div>
+      </div>` : ''}
+      ${saving >= 5 ? `<div class="saving-badge">省 ${saving}%</div>` : ''}
+    </div>
+  </div>`;
+}
+
+init();
+</script>
+</body>
+</html>

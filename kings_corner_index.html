@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>King's Corner 團購</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+:root{
+  --gold:#C9A84C;--gold-dark:#8A6E2A;--gold-light:#F5EDD4;
+  --dark:#12100E;--dark2:#1E1B17;--dark3:#2A2620;--mid:#3D3830;--border:#4A4540;
+  --text-dark:#F0EBE0;--muted-dark:#9A9088;
+  --bg:#F7F3EE;--white:#fff;--red:#C8272D;--radius:12px;
+  --banner-bg:var(--dark);--banner-img:none;--banner-overlay:none;
+  --page-bg:var(--bg);--page-bg-img:none;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-image:var(--page-bg-img);background-size:cover;background-attachment:fixed;background-position:center;color:var(--dark);min-height:100vh}
+
+/* ── HEADER ── */
+.header{background:var(--banner-bg);background-image:var(--banner-img);background-size:cover;background-position:center;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,0.3)}
+.header-inner{max-width:960px;margin:0 auto;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:relative}
+.header-inner::before{content:'';position:absolute;inset:0;background:rgba(18,16,14,0.6);display:var(--banner-overlay,none)}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:3px;color:var(--gold);position:relative;z-index:1}
+.logo small{font-size:12px;letter-spacing:1px;color:var(--muted-dark);font-family:'Noto Sans TC',sans-serif;font-weight:400;margin-left:6px;opacity:0.7}
+.header-date{font-size:12px;color:var(--muted-dark);position:relative;z-index:1}
+
+/* ── HERO ── */
+.hero{background:var(--dark);padding:24px 16px 20px;text-align:center}
+.hero-inner{max-width:960px;margin:0 auto}
+.hero-title{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:4px;color:var(--gold);line-height:1}
+.hero-sub{font-size:11px;letter-spacing:4px;color:var(--muted-dark);text-transform:uppercase;margin:4px 0 14px}
+.hero-desc{font-size:13px;color:rgba(240,235,224,0.65);max-width:420px;margin:0 auto;line-height:1.7}
+
+/* ── SUPPLIER TABS ── */
+.sup-bar{background:var(--dark2);border-bottom:1px solid var(--border);position:sticky;top:56px;z-index:90}
+.sup-tabs{max-width:960px;margin:0 auto;display:flex;overflow-x:auto;padding:0 16px;gap:0;scrollbar-width:none}
+.sup-tabs::-webkit-scrollbar{display:none}
+.sup-tab{flex-shrink:0;padding:13px 18px;font-size:13px;font-weight:700;color:var(--muted-dark);cursor:pointer;border-bottom:3px solid transparent;transition:all 0.15s;white-space:nowrap;font-family:'Noto Sans TC',sans-serif}
+.sup-tab:hover{color:var(--text-dark)}
+.sup-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
+
+/* ── MAIN ── */
+.main{max-width:960px;margin:0 auto;padding:20px 16px 80px}
+
+/* ── AD BANNER ── */
+.ad-banner{border-radius:var(--radius);overflow:hidden;margin-bottom:20px;background:var(--dark2);min-height:100px;display:flex;align-items:center;justify-content:center}
+.ad-banner img{width:100%;max-height:200px;object-fit:cover;display:block}
+.ad-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;text-align:center;width:100%}
+.ad-placeholder .ad-t{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:3px;color:var(--gold)}
+.ad-placeholder .ad-s{font-size:12px;color:var(--muted-dark);margin-top:3px}
+
+/* ── SUP INFO ── */
+.sup-info{background:var(--dark);border-radius:var(--radius);padding:14px 18px;margin-bottom:18px;color:var(--text-dark)}
+.sup-info-name{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;color:var(--gold)}
+.sup-info-meta{font-size:12px;color:var(--muted-dark);margin-top:2px}
+
+/* ── SECTION LABEL ── */
+.section-title{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#9a9080;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.section-title::after{content:'';flex:1;height:1px;background:rgba(0,0,0,0.1)}
+
+/* ── CAMPAIGN CARDS ── */
+.camps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:28px}
+.camp-card{background:var(--white);border-radius:var(--radius);overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.08);cursor:pointer;transition:transform 0.15s,box-shadow 0.15s}
+.camp-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,0.13)}
+.camp-card-top{background:var(--dark);padding:14px 16px 11px;position:relative}
+.camp-tag-wrap{position:absolute;top:11px;right:13px}
+.camp-tag{display:inline-block;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px}
+.tag-active{background:#1a3320;color:#5dca8a;border:1px solid #2e6644}
+.tag-closed{background:#2a2620;color:#5a5450}
+.camp-name{font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:2px;color:var(--gold);padding-right:68px;line-height:1.15;margin-bottom:2px}
+.camp-sup-lbl{font-size:11px;color:var(--muted-dark)}
+.camp-body{padding:12px 16px}
+.camp-meta-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:9px}
+.cm-item{display:flex;flex-direction:column}
+.cm-lbl{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#aaa;margin-bottom:1px}
+.cm-val{font-size:13px;font-weight:700}
+.days-pill{font-size:10px;padding:2px 7px;border-radius:20px;display:inline-block;margin-top:2px}
+.days-urgent{background:#fff0f0;color:var(--red)}
+.days-soon{background:#fff8e6;color:var(--gold-dark)}
+.days-ok{background:#f0f7f0;color:#2e6644}
+.camp-preview{font-size:11px;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
+.camp-cta{display:block;background:var(--dark);color:var(--gold);text-align:center;padding:10px;font-size:13px;font-weight:700;letter-spacing:1px;border:none;cursor:pointer;font-family:'Noto Sans TC',sans-serif;width:100%;transition:background 0.15s}
+.camp-cta:hover{background:var(--mid)}
+.camp-cta.closed{background:#eee;color:#aaa;cursor:not-allowed}
+
+/* ── ORDER PAGE ── */
+#order-page{display:none}
+.back-btn{display:inline-flex;align-items:center;gap:5px;color:#aaa;font-size:13px;cursor:pointer;margin-bottom:16px;background:none;border:none;font-family:'Noto Sans TC',sans-serif;padding:0}
+.back-btn:hover{color:var(--dark)}
+.order-top{background:var(--dark);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;color:var(--text-dark)}
+.order-camp-name{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:var(--gold);margin-bottom:7px}
+.order-chips{display:flex;gap:7px;flex-wrap:wrap}
+.order-chip{background:rgba(255,255,255,0.08);border-radius:20px;padding:3px 11px;font-size:11px}
+
+/* Countdown */
+.cd-strip{background:var(--dark2);border-radius:8px;padding:11px 14px;display:flex;align-items:center;gap:10px;margin-bottom:12px;border:1px solid var(--border)}
+.cd-label{font-size:12px;color:var(--muted-dark);flex-shrink:0}
+.cd-units{display:flex;gap:5px;align-items:center}
+.cu{background:var(--dark3);border-radius:6px;padding:5px 9px;text-align:center;min-width:42px}
+.cu-num{font-family:'Bebas Neue',sans-serif;font-size:21px;color:var(--gold);line-height:1;display:block}
+.cu-lbl{font-size:9px;color:var(--muted-dark);display:block;margin-top:1px}
+.cu-sep{font-size:16px;color:var(--border);font-weight:700;margin-bottom:3px}
+
+/* Form */
+.form-card{background:var(--white);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.form-card-hd{background:var(--dark);padding:10px 16px;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;gap:8px}
+.step-dot{background:var(--gold);color:var(--dark);width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;flex-shrink:0}
+.field{padding:12px 16px;border-bottom:1px solid #f0ece8}
+.field:last-child{border-bottom:none}
+.field label{display:block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#aaa;margin-bottom:5px}
+.field label .req{color:var(--red)}
+.field input{width:100%;border:2px solid #e8e4e0;border-radius:8px;padding:12px 14px;font-size:16px;font-family:'Noto Sans TC',sans-serif;color:var(--dark);background:#fafaf9;outline:none;transition:border-color 0.2s}
+.field input:focus{border-color:var(--gold-dark);background:white}
+
+/* Cat tabs */
+.cat-tabs{display:flex;overflow-x:auto;padding:10px 16px;gap:7px;border-bottom:1px solid #f0ece8;scrollbar-width:none}
+.cat-tabs::-webkit-scrollbar{display:none}
+.cat-tab{flex-shrink:0;padding:6px 13px;border-radius:20px;border:2px solid #e8e4e0;font-size:12px;font-weight:700;color:#aaa;background:white;cursor:pointer;transition:all 0.15s;font-family:'Noto Sans TC',sans-serif}
+.cat-tab.active{background:var(--dark);border-color:var(--dark);color:var(--gold)}
+.cat-panel{display:none}
+.cat-panel.active{display:block}
+
+/* ── PRODUCT ROW (with image) ── */
+.prod-item{display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #f0ece8;gap:10px}
+.prod-item:last-child{border-bottom:none}
+
+/* Image thumbnail */
+.prod-thumb{width:56px;height:56px;border-radius:8px;flex-shrink:0;overflow:hidden;background:#f0ece8;display:flex;align-items:center;justify-content:center;font-size:24px;position:relative}
+.prod-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.prod-thumb.no-img{background:linear-gradient(135deg,#f5f0eb,#e8e0d6)}
+/* Broken image fallback handled by JS */
+
+.prod-info{flex:1;min-width:0}
+.prod-name-txt{font-size:14px;font-weight:700;line-height:1.3;margin-bottom:2px}
+.prod-spec-txt{font-size:11px;color:#aaa}
+.prod-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.prod-price-txt{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--dark);line-height:1}
+.prod-price-txt small{font-size:11px;font-family:'Noto Sans TC',sans-serif;color:#aaa}
+
+/* Stepper */
+.stepper{display:flex;align-items:center;border:2px solid #e8e4e0;border-radius:8px;overflow:hidden}
+.stepper button{width:36px;height:36px;border:none;background:#f7f4f0;font-size:20px;color:#aaa;cursor:pointer;font-family:sans-serif;display:flex;align-items:center;justify-content:center;transition:background 0.1s}
+.stepper button:active{background:#e8e4e0}
+.stepper button.has-v{background:#fff0f0;color:var(--red)}
+.stepper .qty-n{min-width:34px;text-align:center;font-size:16px;font-weight:700;background:white;border-left:1px solid #e8e4e0;border-right:1px solid #e8e4e0;height:36px;display:flex;align-items:center;justify-content:center}
+
+/* Pay / notice */
+.pay-box{background:#fffbf0;border-left:4px solid var(--gold);padding:13px 15px;border-radius:0 8px 8px 0;margin-bottom:12px;font-size:13px;line-height:1.8}
+.pay-box strong{color:var(--gold-dark);display:block;margin-bottom:4px;font-size:14px}
+.notice-box{padding:11px;background:#fff8e6;border-radius:8px;font-size:12px;color:#5d4037;line-height:1.7;border:1px solid #ffe082;margin-bottom:80px}
+
+/* Cart */
+.cart-bar{position:fixed;bottom:0;left:0;right:0;background:white;border-top:2px solid #e8e4e0;padding:11px 16px;z-index:200;box-shadow:0 -4px 20px rgba(0,0,0,0.1)}
+.cart-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;gap:8px}
+.cart-chips-wrap{display:flex;flex-wrap:wrap;gap:4px;flex:1;max-height:42px;overflow:hidden}
+.cart-chip-item{background:#fff0f0;color:#9b1b20;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px}
+.cart-total-num{font-family:'Bebas Neue',sans-serif;font-size:26px;color:var(--red);white-space:nowrap}
+.submit-btn{width:100%;background:var(--dark);color:var(--gold);border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:700;font-family:'Noto Sans TC',sans-serif;cursor:pointer;letter-spacing:2px;transition:background 0.15s}
+.submit-btn:active{background:var(--mid)}
+@media(min-width:640px){.cart-bar{max-width:960px;left:50%;transform:translateX(-50%);border-radius:var(--radius) var(--radius) 0 0}}
+
+/* Success */
+.success-wrap{display:none;position:fixed;inset:0;background:var(--dark);z-index:1000;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center}
+.success-wrap.show{display:flex}
+.success-icon{width:76px;height:76px;background:#2e7d32;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:38px;margin-bottom:18px;animation:popIn 0.4s cubic-bezier(0.34,1.56,0.64,1)}
+@keyframes popIn{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.success-title{font-family:'Bebas Neue',sans-serif;font-size:34px;letter-spacing:3px;color:var(--gold);margin-bottom:7px}
+.success-sub{font-size:13px;color:var(--muted-dark);line-height:1.8;margin-bottom:22px}
+.success-detail{background:var(--dark2);border:1px solid var(--border);border-radius:var(--radius);padding:15px;width:100%;max-width:340px;text-align:left;font-size:13px;color:var(--text-dark);line-height:2}
+.success-detail strong{color:var(--gold)}
+.back-home-btn{margin-top:18px;background:transparent;border:1px solid var(--border);color:var(--muted-dark);padding:10px 24px;border-radius:8px;font-family:'Noto Sans TC',sans-serif;font-size:13px;cursor:pointer}
+
+/* Mobile */
+@media(max-width:480px){
+  .prod-thumb{width:48px;height:48px}
+  .prod-name-txt{font-size:13px}
+}
+
+/* ── QUERY MODAL ── */
+.query-modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:500;align-items:center;justify-content:center;padding:16px}
+.query-modal-bg.show{display:flex}
+.query-modal{background:var(--dark2);border:1px solid var(--border);border-radius:var(--radius);width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.qm-hd{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--dark2);position:sticky;top:0}
+.qm-hd h3{font-size:16px;font-weight:700;color:var(--text)}
+.qm-close{background:none;border:none;color:var(--muted-dark);font-size:22px;cursor:pointer;padding:0 4px}
+.qm-body{padding:20px}
+.qm-order-card{background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px}
+.qm-order-card:last-child{margin-bottom:0}
+.qm-camp-name{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--gold);margin-bottom:6px}
+.qm-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.qm-chip{font-size:11px;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,0.08);color:var(--muted-dark)}
+.qm-items{font-size:12px;color:var(--muted-dark);line-height:1.9;margin-bottom:8px}
+.qm-footer{display:flex;align-items:center;justify-content:space-between}
+.qm-amount{font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--gold)}
+.qm-paid{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px}
+.qm-paid.yes{background:#1a3320;color:#5dca8a;border:1px solid #2e6644}
+.qm-paid.no{background:#3D1518;color:#ff8080;border:1px solid #8b2020}
+.qm-note{background:rgba(201,168,76,0.08);border-left:3px solid var(--gold-dark);padding:10px 12px;border-radius:0 6px 6px 0;font-size:12px;color:rgba(240,235,224,0.7);line-height:1.7;margin-top:10px}
+
+/* ── MARQUEE ── */
+.marquee-bar{background:var(--dark2);border-bottom:1px solid var(--border);overflow:hidden;height:32px;display:flex;align-items:center}
+.marquee-inner{display:flex;white-space:nowrap;animation:marquee 28s linear infinite}
+.marquee-inner:hover{animation-play-state:paused}
+.marquee-inner span{font-size:11px;color:var(--muted-dark);padding:0 32px}
+.marquee-inner span strong{color:var(--gold)}
+@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* ── CAMP BADGES ── */
+.camp-badge-wrap{position:absolute;top:0;left:0;right:0;display:flex;gap:6px;padding:10px 14px;pointer-events:none;z-index:2}
+.camp-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;font-size:13px;font-weight:900;letter-spacing:0.5px;box-shadow:0 2px 8px rgba(0,0,0,0.35)}
+.camp-badge-hot{background:linear-gradient(135deg,#7a2800,#c84000);color:#ffe0c0;border:1px solid #ff6020;animation:badgePulse 2.2s ease-in-out infinite}
+.camp-badge-top{background:linear-gradient(135deg,#5a3a00,#9a6800);color:#ffe090;border:1px solid var(--gold);animation:badgeShine 2.8s ease-in-out infinite}
+@keyframes badgePulse{0%,100%{box-shadow:0 2px 8px rgba(200,64,0,0.4)}50%{box-shadow:0 2px 18px rgba(255,96,32,0.75),0 0 0 3px rgba(255,96,32,0.15)}}
+@keyframes badgeShine{0%,100%{box-shadow:0 2px 8px rgba(154,104,0,0.4)}50%{box-shadow:0 2px 18px rgba(201,168,76,0.7),0 0 0 3px rgba(201,168,76,0.15)}}
+
+/* ── PROGRESS BAR ── */
+.camp-progress-wrap{margin-top:8px}
+.camp-progress-label{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.camp-progress-count{font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--gold);line-height:1}
+.camp-progress-sub{font-size:10px;color:#aaa}
+.camp-progress-bar{height:5px;background:#e8e4e0;border-radius:100px;overflow:hidden}
+.camp-progress-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--gold-dark),var(--gold));transition:width 0.6s ease}
+.camp-progress-fill.full{background:linear-gradient(90deg,#c8272d,#ff6b6b)}
+
+/* ── RECENT NAMES ── */
+.recent-names{display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
+.recent-avatar{width:22px;height:22px;border-radius:50%;background:var(--dark);color:var(--gold);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid var(--gold-dark)}
+.recent-text{font-size:11px;color:#999}
+.recent-text strong{color:var(--dark);font-weight:700}
+
+/* ── AD CAROUSEL ── */
+.carousel{position:relative;border-radius:var(--radius);overflow:hidden;background:var(--dark2);min-height:110px;margin-bottom:20px}
+.carousel-track{display:flex;transition:transform 0.4s cubic-bezier(0.4,0,0.2,1);will-change:transform}
+.carousel-slide{flex-shrink:0;width:100%;position:relative}
+.carousel-slide img{width:100%;max-height:200px;object-fit:cover;display:block}
+.carousel-text{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 24px;text-align:center;min-height:110px}
+.carousel-text .ct{font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:3px;color:var(--gold)}
+.carousel-text .cs{font-size:12px;color:var(--muted-dark);margin-top:4px}
+/* Dots */
+.carousel-dots{position:absolute;bottom:8px;left:0;right:0;display:flex;justify-content:center;gap:6px;pointer-events:none}
+.carousel-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,0.35);transition:all 0.2s;pointer-events:all;cursor:pointer;border:none;padding:0}
+.carousel-dot.active{background:var(--gold);width:18px;border-radius:4px}
+/* Arrows */
+.carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.4);border:none;color:white;width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s;z-index:5}
+.carousel-arrow:hover{background:rgba(0,0,0,0.7)}
+.carousel-arrow.prev{left:8px}
+.carousel-arrow.next{right:8px}
+.carousel-link{display:block;text-decoration:none}
+@media(max-width:480px){
+  .carousel-text .ct{font-size:20px}
+  .carousel-arrow{width:26px;height:26px;font-size:12px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="logo">King's Corner <small>團購</small></div>
+    <div class="header-date" id="header-date"></div>
+  </div>
+</div>
+
+<!-- MARQUEE BAR -->
+<div class="marquee-bar" id="marquee-bar" style="display:none">
+  <div class="marquee-inner" id="marquee-inner"></div>
+</div>
+
+<!-- HOME PAGE -->
+<div id="home-page">
+  <div class="hero">
+    <div class="hero-inner">
+      <div class="hero-title">King's Corner</div>
+      <div class="hero-sub">國王角落 · 嚴選團購</div>
+      <div class="hero-desc">每次團購都是精選好物，點選下方廠商分頁找到你喜歡的商品。</div>
+      <button onclick="openQueryOrder()" style="margin-top:14px;background:transparent;border:1px solid rgba(201,168,76,0.4);border-radius:8px;padding:8px 20px;font-size:12px;color:rgba(201,168,76,0.8);cursor:pointer;font-family:'Noto Sans TC',sans-serif;letter-spacing:1px;transition:all 0.15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='rgba(201,168,76,0.4)';this.style.color='rgba(201,168,76,0.8)'">📋 查詢我的訂單</button>
+    </div>
+  </div>
+  <div class="sup-bar">
+    <div class="sup-tabs" id="sup-tabs"></div>
+  </div>
+  <div class="main">
+    <div class="carousel" id="ad-carousel"></div>
+    <div id="sup-info-strip"></div>
+    <div class="section-title" id="active-label">🔥 進行中的團購</div>
+    <div class="camps-grid" id="active-grid"></div>
+    <div class="section-title" id="closed-label" style="display:none">📁 已結束的團購</div>
+    <div class="camps-grid" id="closed-grid"></div>
+  </div>
+</div>
+
+<!-- ORDER PAGE -->
+<div id="order-page">
+  <div class="main" style="padding-top:18px;padding-bottom:0">
+    <button class="back-btn" onclick="goHome()">← 回到首頁</button>
+    <div class="order-top" id="order-top"></div>
+    <div class="cd-strip">
+      <div class="cd-label">⏳ 距截止</div>
+      <div class="cd-units">
+        <div class="cu"><span class="cu-num" id="cd-d">--</span><span class="cu-lbl">天</span></div>
+        <span class="cu-sep">:</span>
+        <div class="cu"><span class="cu-num" id="cd-h">--</span><span class="cu-lbl">時</span></div>
+        <span class="cu-sep">:</span>
+        <div class="cu"><span class="cu-num" id="cd-m">--</span><span class="cu-lbl">分</span></div>
+        <span class="cu-sep">:</span>
+        <div class="cu"><span class="cu-num" id="cd-s">--</span><span class="cu-lbl">秒</span></div>
+      </div>
+    </div>
+
+    <!-- Step 1: 填資料 -->
+    <div class="form-card">
+      <div class="form-card-hd"><div class="step-dot">1</div>填寫資料</div>
+      <div class="field"><label>姓名 <span class="req">*</span></label><input type="text" id="f-name" placeholder="請輸入姓名" autocomplete="name"></div>
+      <div class="field"><label>手機 <span class="req">*</span></label><input type="tel" id="f-phone" placeholder="09XXXXXXXX" maxlength="10" autocomplete="tel"></div>
+    </div>
+
+    <!-- Step 2: 選商品 -->
+    <div class="form-card">
+      <div class="form-card-hd"><div class="step-dot">2</div>選擇商品</div>
+      <div class="cat-tabs" id="cat-tabs"></div>
+      <div id="cat-panels"></div>
+    </div>
+
+    <div class="pay-box" id="pay-box-area"></div>
+    <div class="notice-box">⚠️ 重量誤差 ±5%，請確保收件地址可冷凍收貨。訂單送出後如需修改請私訊群組管理員。</div>
+  </div>
+
+  <div class="cart-bar">
+    <div class="cart-row">
+      <span style="font-size:12px;color:#aaa;flex-shrink:0">已選</span>
+      <div class="cart-chips-wrap" id="cart-chips"></div>
+      <div class="cart-total-num">$<span id="cart-total">0</span></div>
+    </div>
+    <button class="submit-btn" onclick="submitOrder()">確認送出訂單</button>
+  </div>
+</div>
+
+<!-- SUCCESS -->
+<!-- QUERY ORDER MODAL -->
+<div class="query-modal-bg" id="query-modal-bg">
+  <div class="query-modal">
+    <div class="qm-hd">
+      <h3>📋 我的訂單查詢</h3>
+      <button class="qm-close" onclick="closeQueryModal()">×</button>
+    </div>
+    <div class="qm-body">
+      <!-- Phone input -->
+      <div id="query-input-section">
+        <div style="font-size:13px;color:var(--muted-dark);margin-bottom:14px;line-height:1.8">
+          輸入下單時填寫的手機號碼，即可查看所有訂單紀錄。
+        </div>
+        <div style="display:flex;gap:8px">
+          <input type="tel" id="query-phone" placeholder="09XXXXXXXX" maxlength="10"
+            style="flex:1;background:var(--dark3);border:2px solid var(--border);border-radius:8px;padding:12px 14px;font-size:16px;color:var(--text-dark);font-family:'Noto Sans TC',sans-serif;outline:none;transition:border-color 0.2s"
+            onfocus="this.style.borderColor='var(--gold-dark)'"
+            onblur="this.style.borderColor='var(--border)'"
+            onkeydown="if(event.key==='Enter')queryOrders()">
+          <button onclick="queryOrders()" id="query-btn"
+            style="background:var(--gold);color:var(--dark);border:none;border-radius:8px;padding:12px 18px;font-size:13px;font-weight:700;font-family:'Noto Sans TC',sans-serif;cursor:pointer;white-space:nowrap;transition:opacity 0.15s">
+            查詢
+          </button>
+        </div>
+        <div id="query-error" style="font-size:12px;color:#ff8080;margin-top:8px;display:none"></div>
+      </div>
+      <!-- Results -->
+      <div id="query-results" style="margin-top:16px;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<div class="success-wrap" id="success-wrap">
+  <div class="success-icon">✓</div>
+  <div class="success-title">訂單已送出！</div>
+  <div class="success-sub">感謝你參加 King's Corner 團購<br>請於截止日前完成付款</div>
+  <div class="success-detail" id="success-detail"></div>
+  <button class="back-home-btn" onclick="goHome()">← 回到首頁</button>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  設定區：填入你的圖片網址
+// ══════════════════════════════════════════
+const SITE_CONFIG = {
+  pageBgImage: '',        // 首頁整頁背景（留空=純色）
+  defaultBannerImage: '', // 預設頂部橫幅圖
+};
+
+// ══ 行銷設定（由 admin 後台同步至此） ══
+const MKT = {
+  boostEnabled: true,
+  marqueeEnabled: true,
+  recentEnabled: true,
+  badgeEnabled: true,
+  hotThreshold: 15,
+  topEnabled: true,
+  marqueeText: '本月新品已上架！｜付款期限 3 天內完成匯款',
+  fakeNames: ['張小明','李志偉','王雅婷','陳佳慧','林俊宏','黃淑芬','吳建志','鄭美玲','許志豪','劉怡君','蔡宗翰','楊淑惠','賴建國','謝佳穎','洪志偉','邱淑芬','蘇建宏','周美華','葉志明','何雅惠'],
+  campaignBoost: {
+    2: { base:6, growthHours:8 },
+    3: { base:4, growthHours:12 },
+  },
+};
+
+// ── 行銷函式 ──
+function maskName(name){
+  if(!name)return'';
+  const c=[...name];
+  if(c.length<=1)return name;
+  if(c.length===2)return c[0]+'O';
+  return c[0]+'O'.repeat(c.length-2)+c[c.length-1];
+}
+function getDisplayCount(campaignId){
+  const real=CAMPAIGNS.find(c=>c.id===campaignId)?.orders||0;
+  if(!MKT.boostEnabled)return real;
+  const boost=MKT.campaignBoost[campaignId]||{base:0,growthHours:0};
+  const virtualGrowth=boost.growthHours>0?Math.floor((Date.now()/(1000*3600*boost.growthHours))%20):0;
+  return real+boost.base+virtualGrowth;
+}
+function getRecentNames(campaignId){
+  const boost=MKT.campaignBoost[campaignId]||{base:0};
+  if(!MKT.recentEnabled||!boost.base)return[];
+  const fakePool=MKT.fakeNames;
+  const names=[];
+  for(let i=0;i<Math.min(2,fakePool.length);i++){
+    names.push(maskName(fakePool[(campaignId*7+i*13)%fakePool.length]));
+  }
+  return names;
+}
+function getCampBadge(c, allActive){
+  if(!MKT.badgeEnabled)return'';
+  const count=getDisplayCount(c.id);
+  const isTop=MKT.topEnabled&&allActive.length>0&&allActive.reduce((max,x)=>getDisplayCount(x.id)>getDisplayCount(max.id)?x:max,allActive[0]).id===c.id;
+  if(isTop)return'<div class="camp-badge-wrap"><span class="camp-badge camp-badge-top">👑 最搶手</span></div>';
+  if(count>=MKT.hotThreshold)return'<div class="camp-badge-wrap"><span class="camp-badge camp-badge-hot">🔥 熱門</span></div>';
+  return'';
+}
+function buildMarquee(){
+  const bar=document.getElementById('marquee-bar');
+  const inner=document.getElementById('marquee-inner');
+  if(!MKT.marqueeEnabled){bar.style.display='none';return;}
+  const parts=[];
+  // Static custom text
+  if(MKT.marqueeText){
+    MKT.marqueeText.split('｜').forEach(t=>{if(t.trim())parts.push(`<span>${t.trim()}</span>`);});
+  }
+  // Dynamic: upcoming deadlines
+  CAMPAIGNS.filter(c=>c.status==='active').forEach(c=>{
+    const days=Math.ceil((new Date(c.deadline)-new Date())/(1000*86400));
+    if(days<=5&&days>0)parts.push(`<span>⏰ <strong>${c.name}</strong> 還剩 ${days} 天截止</span>`);
+  });
+  // Dynamic: recent names from active campaigns
+  CAMPAIGNS.filter(c=>c.status==='active').forEach(c=>{
+    const names=getRecentNames(c.id);
+    if(names.length)parts.push(`<span>🛒 ${names.join('、')} 剛剛加入 <strong>${c.name}</strong></span>`);
+  });
+  if(!parts.length){bar.style.display='none';return;}
+  // Duplicate for seamless loop
+  const html=parts.join('')+parts.join('');
+  inner.innerHTML=html;
+  bar.style.display='flex';
+}
+
+// ══ 廠商資料 ══
+// adImage     : 廣告海報圖 URL（貼上圖片直連網址）
+// bannerImage : Header 橫幅圖 URL
+// adTitle/adSub: 沒有圖片時顯示的文字海報
+const SUPPLIERS = [
+  {
+    id:1, name:'初雞', cat:'肉品',
+    note:'冷凍舒肥雞胸肉、雞腿排、雞湯系列',
+    bannerImage:'',
+    // slides: 廣告輪播，由 admin 後台管理後同步至此
+    // 每張: { img, title, sub, link }
+    slides:[
+      {img:'',title:'初雞 5月新品',sub:'泰式酸辣雞胸全新上市 · 限量搶購',link:''},
+      {img:'',title:'初雞 鮮嫩雞腿排',sub:'蔥鹽/味噌 兩種口味 限時優惠',link:''},
+    ]
+  },
+  {
+    id:2, name:'美律', cat:'3C',
+    note:'耳機、音響、藍牙配件',
+    bannerImage:'',
+    slides:[
+      {img:'',title:'美律春季特賣',sub:'藍牙耳機最高 9折 · 數量有限',link:''},
+    ]
+  },
+  {
+    id:3, name:'逢國食品', cat:'零食／調味品',
+    note:'RICHY、韓國CJ、海底撈等進口食品',
+    bannerImage:'',
+    slides:[
+      {img:'',title:'逢國食品 嚴選',sub:'進口好物 · 每月精選開團',link:''},
+      {img:'',title:'韓國CJ 新到貨',sub:'芝麻油・辣椒醬・午餐肉 三款熱銷',link:''},
+    ]
+  },
+];
+
+// ══ 商品圖片庫（做法 B：貼圖片 URL）══
+// key = 商品名稱（完整或部分），value = 圖片 URL
+// 例：'鹽味雞胸': 'https://i.imgur.com/xxxx.jpg'
+// 找不到對應圖片時會顯示分類 emoji
+const PRODUCT_IMAGES = {
+  // 初雞肉品 —— 貼上圖片 URL 即生效
+  // '鹽味雞胸': '',
+  // '味噌雞胸': '',
+  // '蔥鹽雞腿排': '',
+
+  // 逢國食品 —— 可從廠商官網或 Google Drive 取得圖片連結
+  // 'CJ BIBIGO 芝麻油': '',
+  // '海底撈': '',
+};
+
+// 分類 emoji（無圖片時顯示）
+const CAT_EMOJI = {
+  '雞胸肉':'🐔','雞腿排':'🍗','全雞':'🐓','雞翅':'🍖','雞湯':'🍲',
+  '耳機':'🎧','3C':'📱','零食':'🍘','調味品':'🧂','飲品':'🧃',
+  '餅乾':'🍪','糖果':'🍬','肉品':'🥩','default':'📦'
+};
+
+// ══ 團購資料 ══
+const CAMPAIGNS = [
+  {id:1, name:'初雞 202603 團購', supplierId:1, deadline:'2026-03-20', orders:18,
+   minPeople:10, discount:86, status:'closed',
+   note:'匯款：玉山銀行 808-123-456789 戶名：Timmy 王〇〇',
+   products:[
+     {id:'b1',name:'鹽味雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
+     {id:'b2',name:'味噌雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
+     {id:'b3',name:'蔥鹽雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
+   ]},
+  {id:2, name:'初雞 202604 團購', supplierId:1, deadline:'2026-04-15', orders:4,
+   minPeople:10, discount:86, status:'active',
+   note:'匯款：玉山銀行 808-123-456789 或 LINE Pay @timmygroup',
+   products:[
+     {id:'c1',name:'鹽味雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
+     {id:'c2',name:'蔥鹽雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
+     {id:'c3',name:'泰式酸辣雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
+     {id:'c4',name:'義式香草雞胸',cat:'雞胸肉',price:75,spec:'180g ±5%',img:''},
+     {id:'c5',name:'韓式泡菜雞胸',cat:'雞胸肉',price:75,spec:'180g ±5%',img:''},
+     {id:'c6',name:'蔥鹽雞腿排',cat:'雞腿排',price:85,spec:'160g ±5%',img:''},
+     {id:'c7',name:'味噌雞腿排',cat:'雞腿排',price:85,spec:'160g ±5%',img:''},
+     {id:'c8',name:'蜜汁雞翅',cat:'雞翅',price:110,spec:'260g ±5%',img:''},
+     {id:'c9',name:'黑蒜頭雞湯',cat:'雞湯',price:180,spec:'大包 1300g ±5%',img:''},
+     {id:'c10',name:'人參雞湯',cat:'雞湯',price:180,spec:'大包 1300g ±5%',img:''},
+   ]},
+  {id:3, name:'美律耳機 202604 團購', supplierId:2, deadline:'2026-04-30', orders:1,
+   minPeople:5, discount:90, status:'active',
+   note:'匯款後 7 工作天出貨',
+   products:[
+     {id:'d1',name:'ENC降噪耳機',cat:'耳機',price:890,spec:'含充電盒',img:''},
+     {id:'d2',name:'藍牙運動耳機',cat:'耳機',price:1290,spec:'IPX5防水',img:''},
+   ]},
+];
+
+// ══ 圖片匹配邏輯 ══
+function resolveProductImg(p) {
+  // 1. 商品自帶的 img 欄位
+  if (p.img) return p.img;
+  // 2. PRODUCT_IMAGES 模糊比對
+  for (const [key, url] of Object.entries(PRODUCT_IMAGES)) {
+    if (url && p.name.includes(key)) return url;
+  }
+  return null;
+}
+function catEmoji(cat) {
+  return CAT_EMOJI[cat] || CAT_EMOJI['default'];
+}
+function thumbHtml(p) {
+  const url = resolveProductImg(p);
+  if (url) {
+    // onerror fallback to emoji
+    return `<div class="prod-thumb">
+      <img src="${url}" alt="${p.name}" onerror="this.parentElement.innerHTML='<span style=font-size:22px>${catEmoji(p.cat)}</span>'">
+    </div>`;
+  }
+  return `<div class="prod-thumb no-img"><span style="font-size:22px">${catEmoji(p.cat)}</span></div>`;
+}
+
+// ══ STATE ══
+let currentCampaign=null, currentSupplierId=null, qty={}, cdTimer=null;
+
+// ── QUERY ORDER ──
+function openQueryOrder(){
+  document.getElementById('query-modal-bg').classList.add('show');
+  document.getElementById('query-phone').value='';
+  document.getElementById('query-results').style.display='none';
+  document.getElementById('query-error').style.display='none';
+  document.body.style.overflow='hidden';
+  setTimeout(()=>document.getElementById('query-phone').focus(),200);
+}
+function closeQueryModal(){
+  document.getElementById('query-modal-bg').classList.remove('show');
+  document.body.style.overflow='';
+}
+async function queryOrders(){
+  const phone=document.getElementById('query-phone').value.trim();
+  const errEl=document.getElementById('query-error');
+  const resultsEl=document.getElementById('query-results');
+  const btn=document.getElementById('query-btn');
+  errEl.style.display='none';
+  if(!/^09\d{8}$/.test(phone)){errEl.textContent='請輸入正確的手機號碼（09XXXXXXXX）';errEl.style.display='block';return;}
+  if(!GAS_URL){errEl.textContent='系統尚未連線，請稍後再試';errEl.style.display='block';return;}
+  btn.textContent='查詢中…';btn.disabled=true;
+  try{
+    const res=await fetch(GAS_URL+'?action=queryOrder&phone='+encodeURIComponent(phone));
+    const data=await res.json();
+    if(data.status!=='ok'){errEl.textContent=data.message||'查詢失敗';errEl.style.display='block';return;}
+    renderQueryResults(data.orders||[]);
+  }catch(e){errEl.textContent='連線失敗，請稍後再試';errEl.style.display='block';}
+  finally{btn.textContent='查詢';btn.disabled=false;}
+}
+function renderQueryResults(orders){
+  const el=document.getElementById('query-results');
+  el.style.display='block';
+  if(!orders.length){el.innerHTML=`<div style="text-align:center;padding:32px;color:var(--muted-dark);font-size:13px">查無訂單紀錄<br><span style="font-size:11px;opacity:0.6">請確認手機號碼是否正確</span></div>`;return;}
+  const statusMap={active:'進行中',closed:'已結束',draft:'草稿'};
+  el.innerHTML=`<div style="font-size:12px;color:var(--muted-dark);margin-bottom:12px">共找到 <strong style="color:var(--gold)">${orders.length}</strong> 筆訂單</div>`+
+  orders.map(o=>{
+    const items=Array.isArray(o.items)?o.items:[];
+    const itemList=items.map(i=>`${i.name} × ${i.qty}`).join('　');
+    const statusLabel=statusMap[o.status]||'';
+    return`<div class="qm-order-card">
+      <div class="qm-camp-name">${o.campaignName}</div>
+      <div class="qm-meta">
+        ${o.deadline?`<span class="qm-chip">📅 截止 ${o.deadline}</span>`:''}
+        ${statusLabel?`<span class="qm-chip">${o.status==='active'?'🟢':'⚪'} ${statusLabel}</span>`:''}
+        <span class="qm-chip">🕐 ${o.ts||''}</span>
+      </div>
+      <div class="qm-items">${itemList}</div>
+      <div class="qm-footer">
+        <div class="qm-amount">$${o.discounted}</div>
+        <span class="qm-paid ${o.paid?'yes':'no'}">${o.paid?'✓ 已付款':'⚠ 未付款'}</span>
+      </div>
+      ${o.note&&!o.paid?`<div class="qm-note">💳 付款說明：${o.note}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ── INIT ──
+const GAS_URL = localStorage.getItem('kc_gas_url') || 'https://script.google.com/macros/s/AKfycbyPIWjmKomnT0WNBOhABsZjvHXN0B4tiUpAn7V2zAc5SYTJJrtGu5on1TE57rA6zhcz/exec';
+
+async function init(){
+  document.getElementById('header-date').textContent = new Date().toLocaleDateString('zh-TW');
+  if(SITE_CONFIG.pageBgImage) document.documentElement.style.setProperty('--page-bg-img',`url('${SITE_CONFIG.pageBgImage}')`);
+
+  if(GAS_URL){
+    try{
+      const res = await fetch(GAS_URL + '?action=getCampaigns');
+      const data = await res.json();
+      if(data.status === 'ok'){
+        // Merge GAS data with local config
+        if(data.suppliers && data.suppliers.length){
+          // Map GAS suppliers onto local SUPPLIERS (merge bannerImage/slides from local)
+          data.suppliers.forEach(gs => {
+            const local = SUPPLIERS.find(s => String(s.id) === String(gs.id) || s.name === gs.name);
+            if(local){ gs.bannerImage = local.bannerImage || ''; gs.slides = local.slides || []; }
+            else { gs.slides = []; gs.bannerImage = ''; }
+          });
+          SUPPLIERS.length = 0;
+          data.suppliers.forEach(s => SUPPLIERS.push(s));
+        }
+        if(data.campaigns && data.campaigns.length){
+          CAMPAIGNS.length = 0;
+          data.campaigns.forEach(c => CAMPAIGNS.push(c));
+        }
+        // Sync ads from GAS
+        if(data.ads){
+          Object.entries(data.ads).forEach(([sid, slides]) => {
+            const sup = SUPPLIERS.find(s => String(s.id) === String(sid));
+            if(sup && Array.isArray(slides) && slides.length) sup.slides = slides;
+          });
+        }
+        // Sync marketing settings from GAS
+        if(data.marketing){
+          const m = data.marketing;
+          if(m.boostEnabled !== undefined) MKT.boostEnabled = m.boostEnabled !== 'false';
+          if(m.marqueeEnabled !== undefined) MKT.marqueeEnabled = m.marqueeEnabled !== 'false';
+          if(m.recentEnabled !== undefined) MKT.recentEnabled = m.recentEnabled !== 'false';
+          if(m.badgeEnabled !== undefined) MKT.badgeEnabled = m.badgeEnabled !== 'false';
+          if(m.hotThreshold) MKT.hotThreshold = parseInt(m.hotThreshold) || 15;
+          if(m.topEnabled !== undefined) MKT.topEnabled = m.topEnabled !== 'false';
+          if(m.marqueeText) MKT.marqueeText = m.marqueeText;
+          if(m.fakeNames){ try{ MKT.fakeNames = JSON.parse(m.fakeNames); }catch(e){} }
+          if(m.campaignBoost){ try{ MKT.campaignBoost = JSON.parse(m.campaignBoost); }catch(e){} }
+        }
+      }
+    }catch(e){ console.warn('GAS 載入失敗，使用靜態資料', e); }
+  }
+
+  buildSupTabs();
+  const urlCid = new URLSearchParams(location.search).get('cid');
+  if(urlCid){
+    const c = CAMPAIGNS.find(x=>String(x.id)===String(urlCid));
+    if(c && c.status==='active'){ openCampaign(c.id); return; }
+  }
+  const firstActive = SUPPLIERS.find(s=>CAMPAIGNS.some(c=>String(c.supplierId)===String(s.id)&&c.status==='active')) || SUPPLIERS[0];
+  if(firstActive){
+    // Wait for tabs to render before selecting
+    setTimeout(()=>selectSupplier(firstActive.id), 50);
+  }
+  buildMarquee();
+}
+
+// ── SUP TABS ──
+function buildSupTabs(){
+  const visible = SUPPLIERS.filter(s=>CAMPAIGNS.some(c=>String(c.supplierId)===String(s.id)));
+  document.getElementById('sup-tabs').innerHTML =
+    `<div class="sup-tab active" id="sup-tab-all" onclick="selectSupplier(null,this)">全部</div>` +
+    visible.map(s=>`<div class="sup-tab" id="sup-tab-${s.id}" onclick="selectSupplier(${s.id},this)">${s.name}</div>`).join('');
+}
+function selectSupplier(sid,el){
+  currentSupplierId = sid;
+  document.querySelectorAll('.sup-tab').forEach(t=>t.classList.remove('active'));
+  const tabEl = el || document.getElementById(sid?`sup-tab-${sid}`:'sup-tab-all');
+  if(tabEl) tabEl.classList.add('active');
+  renderHome();
+}
+
+// ── HOME ──
+function renderHome(){
+  const sid = currentSupplierId;
+  const sup = sid ? SUPPLIERS.find(s=>s.id===sid) : null;
+
+  // Ad carousel
+  const slides = sup?.slides || [{img:'',title:"King's Corner",sub:'嚴選好物 · 每月精選團購',link:''}];
+  buildCarousel(slides);
+
+  // Sup info
+  const stripEl = document.getElementById('sup-info-strip');
+  stripEl.innerHTML = sup ? `<div class="sup-info"><div class="sup-info-name">${sup.name}</div><div class="sup-info-meta">${sup.cat} ｜ ${sup.note}</div></div>` : '';
+
+  // Banner
+  const bannerImg = sup?.bannerImage || SITE_CONFIG.defaultBannerImage || '';
+  document.documentElement.style.setProperty('--banner-img', bannerImg ? `url('${bannerImg}')` : 'none');
+  document.documentElement.style.setProperty('--banner-overlay', bannerImg ? 'block' : 'none');
+
+  const active = CAMPAIGNS.filter(c=>c.status==='active'&&(!sid||c.supplierId===sid));
+  const closed = CAMPAIGNS.filter(c=>c.status==='closed'&&(!sid||c.supplierId===sid));
+
+  document.getElementById('active-grid').innerHTML = active.length ? active.map(c=>campCardHtml(c,active)).join('') : `<div style="color:#aaa;font-size:13px;padding:6px 0">目前沒有進行中的團購</div>`;
+  document.getElementById('closed-label').style.display = closed.length ? 'flex' : 'none';
+  document.getElementById('closed-grid').innerHTML = closed.map(c=>campCardHtml(c,[])).join('');
+}
+// ── CAROUSEL ──
+let carouselTimer = null;
+let carouselCurrent = 0;
+let carouselSlides = [];
+
+function buildCarousel(slides){
+  clearInterval(carouselTimer);
+  carouselCurrent = 0;
+  carouselSlides = slides.length ? slides : [{img:'',title:"King's Corner",sub:'嚴選好物 · 每月精選團購',link:''}];
+  const el = document.getElementById('ad-carousel');
+  const count = carouselSlides.length;
+
+  // Build slides HTML
+  const slidesHtml = carouselSlides.map((s,i) => {
+    let inner;
+    if(s.img){
+      const safeTitle = (s.title||'').replace(/"/g,'&quot;');
+      const safeSub = (s.sub||'').replace(/"/g,'&quot;');
+      inner = '<img src="'+s.img+'" alt="'+safeTitle+'" data-title="'+safeTitle+'" data-sub="'+safeSub+'" onerror="var p=this.parentElement;p.innerHTML=carouselTextSlide(this.dataset.title,this.dataset.sub)">';
+    } else {
+      inner = carouselTextSlide(s.title||"King's Corner", s.sub||'');
+    }
+    if(s.link){
+      return '<div class="carousel-slide"><a href="'+s.link+'" class="carousel-link" target="_blank" rel="noopener">'+inner+'</a></div>';
+    }
+    return '<div class="carousel-slide">'+inner+'</div>';
+  }).join('');
+
+  const dotsHtml = count > 1
+    ? `<div class="carousel-dots">${carouselSlides.map((_,i)=>`<button class="carousel-dot${i===0?' active':''}" onclick="goToSlide(${i})"></button>`).join('')}</div>`
+    : '';
+
+  const arrowsHtml = count > 1
+    ? `<button class="carousel-arrow prev" onclick="prevSlide()">&#8249;</button>
+       <button class="carousel-arrow next" onclick="nextSlide()">&#8250;</button>`
+    : '';
+
+  el.innerHTML = `<div class="carousel-track" id="carousel-track">${slidesHtml}</div>${dotsHtml}${arrowsHtml}`;
+
+  // Auto-play if multiple slides
+  if(count > 1){
+    carouselTimer = setInterval(nextSlide, 3500);
+  }
+}
+
+function carouselTextSlide(title, sub){
+  return `<div class="carousel-text"><div class="ct">${title}</div>${sub?`<div class="cs">${sub}</div>`:''}</div>`;
+}
+
+function goToSlide(n){
+  carouselCurrent = n;
+  const track = document.getElementById('carousel-track');
+  if(track) track.style.transform = `translateX(-${n*100}%)`;
+  document.querySelectorAll('.carousel-dot').forEach((d,i)=>d.classList.toggle('active',i===n));
+  // Reset timer
+  clearInterval(carouselTimer);
+  if(carouselSlides.length > 1) carouselTimer = setInterval(nextSlide, 3500);
+}
+function nextSlide(){ goToSlide((carouselCurrent+1) % carouselSlides.length); }
+function prevSlide(){ goToSlide((carouselCurrent-1+carouselSlides.length) % carouselSlides.length); }
+
+function campCardHtml(c, allActive){
+  const sup = SUPPLIERS.find(s=>s.id===c.supplierId)||{name:'—'};
+  const isActive = c.status==='active';
+
+  // ── Deadline: show hours if ≤2 days ──
+  const diffMs = new Date(c.deadline+'T23:59:59') - new Date();
+  const diffH = Math.max(0, Math.floor(diffMs/3600000));
+  const diffD = Math.floor(diffH/24);
+  const remH = diffH % 24;
+  let daysHtml = '';
+  if(isActive && diffMs > 0){
+    if(diffD === 0){
+      daysHtml = `<span class="days-pill days-urgent">🔴 剩 ${diffH} 小時！</span>`;
+    } else if(diffD <= 2){
+      daysHtml = `<span class="days-pill days-urgent">剩 ${diffD} 天 ${remH} 小時</span>`;
+    } else if(diffD <= 7){
+      daysHtml = `<span class="days-pill days-soon">剩 ${diffD} 天</span>`;
+    } else {
+      daysHtml = `<span class="days-pill days-ok">剩 ${diffD} 天</span>`;
+    }
+  }
+
+  // ── Badge ──
+  const badge = isActive ? getCampBadge(c, allActive||[]) : '';
+
+  // ── Progress / people count ──
+  const displayCount = isActive ? getDisplayCount(c.id) : (c.orders||0);
+  const recentNames = isActive ? getRecentNames(c.id) : [];
+
+  const progressHtml = isActive ? `
+    <div class="camp-progress-wrap">
+      <div class="camp-progress-label">
+        <div>
+          <span class="camp-progress-count">${displayCount}</span>
+          <span class="camp-progress-sub"> 人已跟團</span>
+        </div>
+        ${recentNames.length ? `<div class="recent-names">
+          ${recentNames.map(n=>`<div class="recent-avatar">${[...n][0]}</div>`).join('')}
+          <span class="recent-text">${recentNames.join('、')} 剛剛加入</span>
+        </div>` : ''}
+      </div>
+    </div>` : '';
+
+  const preview = c.products.slice(0,3).map(p=>p.name).join('、')+(c.products.length>3?` 等${c.products.length}種`:'');
+
+  return `<div class="camp-card" onclick="${isActive?`openCampaign(${c.id})`:''}">
+    <div class="camp-card-top">
+      <div class="camp-tag-wrap">${isActive?'<span class="camp-tag tag-active">進行中</span>':'<span class="camp-tag tag-closed">已結束</span>'}</div>
+      ${badge}
+      <div class="camp-name" style="${badge?'padding-top:36px':''}">
+        ${c.name}
+      </div>
+      <div class="camp-sup-lbl">${sup.name} · ${sup.cat}</div>
+    </div>
+    <div class="camp-body">
+      <div class="camp-meta-row">
+        <div class="cm-item"><div class="cm-lbl">截止日</div><div class="cm-val">${c.deadline}</div>${daysHtml}</div>
+        <div class="cm-item"><div class="cm-lbl">折扣</div><div class="cm-val" style="color:var(--red)">${c.discount}折</div></div>
+        <div class="cm-item"><div class="cm-lbl">品項</div><div class="cm-val">${c.products.length} 種</div></div>
+      </div>
+      <div class="camp-preview">${preview}</div>
+      ${progressHtml}
+    </div>
+    ${isActive?`<button class="camp-cta">立即訂購 →</button>`:`<button class="camp-cta closed">已結束</button>`}
+  </div>`;
+}
+
+// ── ORDER PAGE ──
+function openCampaign(id){
+  currentCampaign = CAMPAIGNS.find(c=>c.id===id);
+  if(!currentCampaign||currentCampaign.status!=='active') return;
+  qty={};
+  document.getElementById('home-page').style.display='none';
+  document.getElementById('order-page').style.display='block';
+  document.getElementById('success-wrap').classList.remove('show');
+  buildOrderPage(); startCountdown(); window.scrollTo(0,0);
+}
+function goHome(){
+  clearInterval(cdTimer);
+  document.getElementById('home-page').style.display='block';
+  document.getElementById('order-page').style.display='none';
+  document.getElementById('success-wrap').classList.remove('show');
+  document.body.style.overflow='';
+}
+function buildOrderPage(){
+  const c = currentCampaign;
+  const sup = SUPPLIERS.find(s=>s.id===c.supplierId)||{name:'—'};
+  document.getElementById('order-top').innerHTML =
+    `<div class="order-camp-name">${c.name}</div>
+     <div class="order-chips">
+       <span class="order-chip">🏭 ${sup.name}</span>
+       <span class="order-chip">📅 截止 ${c.deadline}</span>
+       <span class="order-chip" style="color:#5dca8a">🎁 ${c.discount}折</span>
+     </div>`;
+  document.getElementById('pay-box-area').innerHTML = `<strong>💳 付款方式</strong>${c.note||'請向管理員確認付款方式'}`;
+
+  const cats = [...new Set(c.products.map(p=>p.cat))];
+  document.getElementById('cat-tabs').innerHTML = cats.map((cat,i)=>
+    `<button class="cat-tab ${i===0?'active':''}" onclick="switchCat('${CSS.escape(cat)}',this)">${cat}</button>`
+  ).join('');
+
+  document.getElementById('cat-panels').innerHTML = cats.map((cat,i)=>
+    `<div class="cat-panel ${i===0?'active':''}" id="cp-${CSS.escape(cat)}">` +
+    c.products.filter(p=>p.cat===cat).map(p=>{
+      qty[p.id]=0;
+      return `<div class="prod-item">
+        ${thumbHtml(p)}
+        <div class="prod-info">
+          <div class="prod-name-txt">${p.name}</div>
+          <div class="prod-spec-txt">${p.spec}</div>
+        </div>
+        <div class="prod-right">
+          <div class="prod-price-txt">$${p.price} <small>/份</small></div>
+          <div class="stepper" id="stp-${p.id}">
+            <button onclick="chg('${p.id}',-1)">−</button>
+            <div class="qty-n" id="qn-${p.id}">0</div>
+            <button onclick="chg('${p.id}',1)">＋</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('') + `</div>`
+  ).join('');
+}
+function switchCat(cat,el){
+  document.querySelectorAll('.cat-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.cat-panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('cp-'+cat).classList.add('active');
+}
+function chg(id,d){
+  qty[id]=Math.max(0,(qty[id]||0)+d);
+  document.getElementById('qn-'+id).textContent=qty[id];
+  document.getElementById('stp-'+id).querySelector('button').className=qty[id]>0?'has-v':'';
+  updateCart();
+}
+function updateCart(){
+  let total=0; const chips=[];
+  currentCampaign.products.forEach(p=>{
+    const q=qty[p.id]||0;
+    if(q>0){total+=q*p.price;chips.push(`${p.name.slice(0,5)}×${q}`);}
+  });
+  const disc=Math.round(total*(currentCampaign.discount/100));
+  document.getElementById('cart-total').textContent=disc.toLocaleString();
+  document.getElementById('cart-chips').innerHTML=
+    chips.slice(0,4).map(ch=>`<span class="cart-chip-item">${ch}</span>`).join('')+
+    (chips.length>4?`<span class="cart-chip-item">+${chips.length-4}</span>`:'');
+}
+function startCountdown(){
+  clearInterval(cdTimer);
+  function tick(){
+    const end=new Date(currentCampaign.deadline+'T23:59:59');
+    let diff=Math.max(0,end-new Date())/1000;
+    const d=Math.floor(diff/86400);diff-=d*86400;
+    const h=Math.floor(diff/3600);diff-=h*3600;
+    const m=Math.floor(diff/60);const s=Math.floor(diff%60);
+    const p=n=>String(n).padStart(2,'0');
+    document.getElementById('cd-d').textContent=d;
+    document.getElementById('cd-h').textContent=p(h);
+    document.getElementById('cd-m').textContent=p(m);
+    document.getElementById('cd-s').textContent=p(s);
+  }
+  tick(); cdTimer=setInterval(tick,1000);
+}
+function submitOrder(){
+  const name=document.getElementById('f-name').value.trim();
+  const phone=document.getElementById('f-phone').value.trim();
+  if(!name){alert('請填寫姓名');return;}
+  if(!/^09\d{8}$/.test(phone)){alert('請填寫正確手機號碼（09XXXXXXXX）');return;}
+  const items=[];let total=0;
+  currentCampaign.products.forEach(p=>{
+    const q=qty[p.id]||0;
+    if(q>0){items.push({id:p.id,name:p.name,qty:q,price:p.price});total+=q*p.price;}
+  });
+  if(!items.length){alert('請選擇至少一項商品');return;}
+  const disc=Math.round(total*(currentCampaign.discount/100));
+  document.getElementById('success-detail').innerHTML=
+    `<strong>訂購人：</strong>${name}<br><strong>手機：</strong>${phone}<br>`+
+    `<strong>團購：</strong>${currentCampaign.name}<br>`+
+    `<hr style="margin:8px 0;border:none;border-top:1px solid var(--border)">`+
+    `<strong>明細：</strong><br>`+items.map(i=>`${i.name} × ${i.qty} = $${i.qty*i.price}`).join('<br>')+
+    `<br><hr style="margin:8px 0;border:none;border-top:1px solid var(--border)">`+
+    `原價 $${total} → <strong style="color:var(--gold);font-size:17px">優惠後 $${disc}</strong>`;
+  clearInterval(cdTimer);
+  document.getElementById('success-wrap').classList.add('show');
+  document.body.style.overflow='hidden';
+  if(GAS_URL){
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        action: 'submitOrder',
+        name, phone,
+        campaignId: currentCampaign.id,
+        campaignName: currentCampaign.name,
+        items, total, discounted: disc,
+        ts: new Date().toLocaleString('zh-TW')
+      })
+    }).then(r=>r.json()).then(data=>{
+      if(data.status!=='ok') console.warn('Order save warning:', data.message);
+    }).catch(e=>console.warn('Order save failed:', e));
+  }
+}
+
+init();
+</script>
+</body>
+</html>
