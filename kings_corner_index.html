@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>King's Corner 團購</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
@@ -28,7 +28,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 /* ── HERO ── */
 .hero{background:var(--dark);padding:24px 16px 20px;text-align:center}
 .hero-inner{max-width:960px;margin:0 auto}
-.hero-title{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:4px;color:var(--gold);line-height:1}
+.hero-title{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:4px;color:var(--gold);line-height:1;text-shadow:0 2px 12px rgba(0,0,0,0.8)}
 .hero-sub{font-size:11px;letter-spacing:4px;color:var(--muted-dark);text-transform:uppercase;margin:4px 0 14px}
 .hero-desc{font-size:13px;color:rgba(240,235,224,0.65);max-width:420px;margin:0 auto;line-height:1.7}
 
@@ -140,7 +140,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 
 /* Stepper */
 .stepper{display:flex;align-items:center;border:2px solid #e8e4e0;border-radius:8px;overflow:hidden}
-.stepper button{width:36px;height:36px;border:none;background:#f7f4f0;font-size:20px;color:#aaa;cursor:pointer;font-family:sans-serif;display:flex;align-items:center;justify-content:center;transition:background 0.1s}
+.stepper button{width:44px;height:44px;border:none;background:#f7f4f0;font-size:20px;color:#aaa;cursor:pointer;font-family:sans-serif;display:flex;align-items:center;justify-content:center;transition:background 0.1s;touch-action:manipulation;-webkit-user-select:none;user-select:none}
 .stepper button:active{background:#e8e4e0}
 .stepper button.has-v{background:#fff0f0;color:var(--red)}
 .stepper .qty-n{min-width:34px;text-align:center;font-size:16px;font-weight:700;background:white;border-left:1px solid #e8e4e0;border-right:1px solid #e8e4e0;height:36px;display:flex;align-items:center;justify-content:center}
@@ -926,7 +926,7 @@ function buildOrderPage(){
     `<button class="cat-tab ${i===0?'active':''}" onclick="switchCat('${CSS.escape(cat)}',this)">${cat}</button>`
   ).join('');
 
-  document.getElementById('cat-panels').innerHTML = cats.map((cat,i)=>
+  document.getElementById('cat-panels').innerHTML = cats.filter(c=>c&&c!=='undefined').map((cat,i)=>
     `<div class="cat-panel ${i===0?'active':''}" id="cp-${CSS.escape(cat)}">` +
     c.products.filter(p=>p.cat===cat).map(p=>{
       qty[p.id]=0;
@@ -934,7 +934,7 @@ function buildOrderPage(){
         ${thumbHtml(p)}
         <div class="prod-info">
           <div class="prod-name-txt">${p.name}</div>
-          <div class="prod-spec-txt">${p.spec}</div>
+          <div class="prod-spec-txt">${p.spec&&p.spec!=='undefined'?p.spec:''}${(p.stock&&parseInt(p.stock)<999&&p.stock!=='undefined')?` · 剩 ${p.stock} 份`:''}</div>
         </div>
         <div class="prod-right">
           <div class="prod-price-txt">$${p.price} <small>/份</small></div>
@@ -955,9 +955,17 @@ function switchCat(cat,el){
   document.getElementById('cp-'+cat).classList.add('active');
 }
 function chg(id,d){
-  qty[id]=Math.max(0,(qty[id]||0)+d);
+  const p=currentCampaign.products.find(x=>x.id===id);
+  const maxStock=parseInt(p?.stock)||999;
+  qty[id]=Math.max(0,Math.min(maxStock,(qty[id]||0)+d));
+  if(d>0&&qty[id]===(qty[id]-d+d)&&qty[id]===maxStock){
+    // Already at max
+  }
   document.getElementById('qn-'+id).textContent=qty[id];
-  document.getElementById('stp-'+id).querySelector('button').className=qty[id]>0?'has-v':'';
+  const minusBtn=document.getElementById('stp-'+id).querySelector('button:first-child');
+  const plusBtn=document.getElementById('stp-'+id).querySelector('button:last-child');
+  if(minusBtn)minusBtn.className=qty[id]>0?'has-v':'';
+  if(plusBtn)plusBtn.style.opacity=qty[id]>=maxStock?'0.35':'1';
   updateCart();
 }
 function updateCart(){
