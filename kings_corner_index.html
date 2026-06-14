@@ -468,7 +468,9 @@ function maskName(name){
   return c[0]+'O'.repeat(c.length-2)+c[c.length-1];
 }
 function getDisplayCount(campaignId){
-  const real=CAMPAIGNS.find(c=>c.id===campaignId)?.orders||0;
+  const c=CAMPAIGNS.find(x=>String(x.id)===String(campaignId));
+  // Use real orderCount from GAS if available
+  const real=c?.orderCount!==undefined?parseInt(c.orderCount)||0:(c?.orders||0);
   if(!MKT.boostEnabled)return real;
   const boost=MKT.campaignBoost[campaignId]||{base:0,growthHours:0};
   const virtualGrowth=boost.growthHours>0?Math.floor((Date.now()/(1000*3600*boost.growthHours))%20):0;
@@ -973,18 +975,25 @@ function buildOrderPage(){
     `<div class="cat-panel ${i===0?'active':''}" id="cp-${CSS.escape(cat)}">` +
     c.products.filter(p=>p.cat===cat).map(p=>{
       qty[p.id]=0;
-      return `<div class="prod-item">
+      const isSoldOut=p.remaining===0;
+      qty[p.id]=0;
+      return `<div class="prod-item" style="${isSoldOut?'opacity:0.5':''}">
         ${thumbHtml(p)}
         <div class="prod-info">
-          <div class="prod-name-txt">${p.name}</div>
-          <div class="prod-spec-txt">${p.spec&&p.spec!=='undefined'?p.spec:''}${(p.stock&&parseInt(p.stock)<999&&p.stock!=='undefined')?` · 剩 ${p.stock} 份`:''}</div>
+          <div class="prod-name-txt">${p.name}${isSoldOut?' <span style="font-size:10px;color:#ff8080;font-weight:700;background:#fff0f0;padding:1px 6px;border-radius:10px">售完</span>':''}</div>
+          <div class="prod-spec-txt">${p.spec&&p.spec!=='undefined'?p.spec:''}${
+            p.remaining!==undefined
+              ? (p.remaining===0?' · <span style="color:#ff8080;font-weight:700">已售完</span>'
+                : parseInt(p.stock)<999?` · 剩 <strong style="color:${p.remaining<=2?'#ff8080':'#2e7d32'}">${p.remaining}</strong> 份`:'')
+              : (p.stock&&parseInt(p.stock)<999&&p.stock!=='undefined'?` · 剩 ${p.stock} 份`:'')
+          }</div>
         </div>
         <div class="prod-right">
           <div class="prod-price-txt">$${p.price} <small>/份</small></div>
           <div class="stepper" id="stp-${p.id}">
             <button onclick="chg('${p.id}',-1)">−</button>
             <div class="qty-n" id="qn-${p.id}">0</div>
-            <button onclick="chg('${p.id}',1)">＋</button>
+            <button onclick="chg('${p.id}',1)" ${isSoldOut?'disabled style="opacity:0.35;cursor:not-allowed"':''}>＋</button>
           </div>
         </div>
       </div>`;
@@ -998,12 +1007,11 @@ function switchCat(cat,el){
   document.getElementById('cp-'+cat).classList.add('active');
 }
 function chg(id,d){
-  const p=currentCampaign.products.find(x=>x.id===id);
-  const maxStock=parseInt(p?.stock)||999;
+  const p=currentCampaign.products.find(x=>String(x.id)===String(id));
+  // Use remaining from GAS if available, otherwise fall back to stock
+  const maxStock=p?.remaining!==undefined?p.remaining:(parseInt(p?.stock)||999);
+  if(d>0&&(qty[id]||0)>=maxStock){return;} // Already at max
   qty[id]=Math.max(0,Math.min(maxStock,(qty[id]||0)+d));
-  if(d>0&&qty[id]===(qty[id]-d+d)&&qty[id]===maxStock){
-    // Already at max
-  }
   document.getElementById('qn-'+id).textContent=qty[id];
   const minusBtn=document.getElementById('stp-'+id).querySelector('button:first-child');
   const plusBtn=document.getElementById('stp-'+id).querySelector('button:last-child');
