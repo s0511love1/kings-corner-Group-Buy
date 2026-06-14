@@ -182,7 +182,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 .query-modal-bg.show{display:flex}
 .query-modal{background:var(--dark2);border:1px solid var(--border);border-radius:var(--radius);width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
 .qm-hd{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--dark2);position:sticky;top:0}
-.qm-hd h3{font-size:16px;font-weight:700;color:var(--text)}
+.qm-hd h3{font-size:16px;font-weight:700;color:#F0EBE0}
 .qm-close{background:none;border:none;color:var(--muted-dark);font-size:22px;cursor:pointer;padding:0 4px}
 .qm-body{padding:20px}
 .qm-order-card{background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px}
@@ -826,7 +826,7 @@ function nextSlide(){ goToSlide((carouselCurrent+1) % carouselSlides.length); }
 function prevSlide(){ goToSlide((carouselCurrent-1+carouselSlides.length) % carouselSlides.length); }
 
 function campCardHtml(c, allActive){
-  const sup = SUPPLIERS.find(s=>s.id===c.supplierId)||{name:'—'};
+  const sup = SUPPLIERS.find(s=>String(s.id)===String(c.supplierId))||{name:'—'};
   const isActive = c.status==='active';
 
   // ── Deadline: show hours if ≤2 days ──
@@ -911,7 +911,7 @@ function goHome(){
 }
 function buildOrderPage(){
   const c = currentCampaign;
-  const sup = SUPPLIERS.find(s=>s.id===c.supplierId)||{name:'—'};
+  const sup = SUPPLIERS.find(s=>String(s.id)===String(c.supplierId))||{name:'—'};
   document.getElementById('order-top').innerHTML =
     `<div class="order-camp-name">${c.name}</div>
      <div class="order-chips">
@@ -921,12 +921,15 @@ function buildOrderPage(){
      </div>`;
   document.getElementById('pay-box-area').innerHTML = `<strong>💳 付款方式</strong>${c.note||'請向管理員確認付款方式'}`;
 
+  // Normalize product cat - replace undefined/empty with '未分類'
+  c.products.forEach(p=>{ if(!p.cat||p.cat==='undefined'||p.cat.trim()==='') p.cat='未分類'; });
   const cats = [...new Set(c.products.map(p=>p.cat))];
-  document.getElementById('cat-tabs').innerHTML = cats.map((cat,i)=>
+  const validCats = cats.filter(c=>c&&c!=='undefined'&&c!=='null'&&c.trim()!=='');
+  document.getElementById('cat-tabs').innerHTML = validCats.map((cat,i)=>
     `<button class="cat-tab ${i===0?'active':''}" onclick="switchCat('${CSS.escape(cat)}',this)">${cat}</button>`
   ).join('');
 
-  document.getElementById('cat-panels').innerHTML = cats.filter(c=>c&&c!=='undefined').map((cat,i)=>
+  document.getElementById('cat-panels').innerHTML = validCats.map((cat,i)=>
     `<div class="cat-panel ${i===0?'active':''}" id="cp-${CSS.escape(cat)}">` +
     c.products.filter(p=>p.cat===cat).map(p=>{
       qty[p.id]=0;
