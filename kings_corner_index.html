@@ -367,15 +367,15 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
         <div style="font-size:13px;color:var(--muted-dark);margin-bottom:14px;line-height:1.8">
           輸入下單時填寫的手機號碼，即可查看所有訂單紀錄。
         </div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;flex-direction:column;gap:8px">
           <input type="tel" id="query-phone" placeholder="09XXXXXXXX" maxlength="10"
-            style="flex:1;background:var(--dark3);border:2px solid var(--border);border-radius:8px;padding:12px 14px;font-size:16px;color:var(--text-dark);font-family:'Noto Sans TC',sans-serif;outline:none;transition:border-color 0.2s"
+            style="width:100%;background:var(--dark3);border:2px solid var(--border);border-radius:8px;padding:12px 14px;font-size:16px;color:var(--text-dark);font-family:'Noto Sans TC',sans-serif;outline:none;transition:border-color 0.2s"
             onfocus="this.style.borderColor='var(--gold-dark)'"
             onblur="this.style.borderColor='var(--border)'"
             onkeydown="if(event.key==='Enter')queryOrders()">
           <button onclick="queryOrders()" id="query-btn"
-            style="background:var(--gold);color:var(--dark);border:none;border-radius:8px;padding:12px 18px;font-size:13px;font-weight:700;font-family:'Noto Sans TC',sans-serif;cursor:pointer;white-space:nowrap;transition:opacity 0.15s">
-            查詢
+            style="width:100%;background:var(--gold);color:var(--dark);border:none;border-radius:8px;padding:13px;font-size:14px;font-weight:700;font-family:'Noto Sans TC',sans-serif;cursor:pointer;transition:opacity 0.15s">
+            查詢訂單
           </button>
         </div>
         <div id="query-error" style="font-size:12px;color:#ff8080;margin-top:8px;display:none"></div>
@@ -870,7 +870,7 @@ function campCardHtml(c, allActive){
 
   const preview = c.products.slice(0,3).map(p=>p.name).join('、')+(c.products.length>3?` 等${c.products.length}種`:'');
 
-  return `<div class="camp-card" onclick="${isActive?`openCampaign(${c.id})`:''}">
+  return `<div class="camp-card" onclick="${isActive?`openCampaign('${c.id}')`:''}">
     <div class="camp-card-top">
       <div class="camp-tag-wrap">${isActive?'<span class="camp-tag tag-active">進行中</span>':'<span class="camp-tag tag-closed">已結束</span>'}</div>
       ${badge}
@@ -888,13 +888,13 @@ function campCardHtml(c, allActive){
       <div class="camp-preview">${preview}</div>
       ${progressHtml}
     </div>
-    ${isActive?`<button class="camp-cta">立即訂購 →</button>`:`<button class="camp-cta closed">已結束</button>`}
+    ${isActive?`<button class="camp-cta" onclick="event.stopPropagation();openCampaign('${c.id}')">立即訂購 →</button>`:`<button class="camp-cta closed">已結束</button>`}
   </div>`;
 }
 
 // ── ORDER PAGE ──
 function openCampaign(id){
-  currentCampaign = CAMPAIGNS.find(c=>c.id===id);
+  currentCampaign = CAMPAIGNS.find(c=>String(c.id)===String(id));
   if(!currentCampaign||currentCampaign.status!=='active') return;
   qty={};
   document.getElementById('home-page').style.display='none';
