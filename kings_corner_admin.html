@@ -1587,36 +1587,46 @@ async function confirmImport(){
     return{supplierId:sup?String(sup.id):'__new__'+r.supplierName,supplierName:r.supplierName,...r};
   });
 
-  // Warn about missing suppliers but still proceed (GAS will auto-create)
+  // Warn about missing suppliers - show toast and proceed
   if(missingSuppliers.size>0){
     const names=[...missingSuppliers].join('、');
-    if(!confirm(`以下廠商在系統中不存在，將自動建立：\n${names}\n\n確定繼續匯入嗎？`))return;
+    showToast(`注意：將自動建立新廠商：${names}`);
+    await new Promise(r=>setTimeout(r,1500)); // brief pause so user sees the toast
   }
 
   loading(true,`匯入中… (共 ${prods.length} 筆)`);
   try{
-    // Split into batches of 30 to avoid URL length limit
-    const BATCH=30;
+    // Use POST with JSON body to bypass URL length limit
+    // GAS doPost receives the full JSON payload
+    const BATCH=20;
     let totalAdded=0,totalUpdated=0,totalDeactivated=0;
     const batches=[];
     for(let i=0;i<prods.length;i+=BATCH)batches.push(prods.slice(i,i+BATCH));
 
     for(let b=0;b<batches.length;b++){
-      loading(true,`匯入中… ${b*BATCH+1}–${Math.min((b+1)*BATCH,prods.length)} / ${prods.length}`);
-      // First batch uses selected mode, subsequent batches always upsert
+      loading(true,`匯入中… 第 ${b+1}/${batches.length} 批`);
       const batchMode=b===0?mode:'upsert';
-      const qs=new URLSearchParams({
-        action:'importProducts',
-        products:JSON.stringify(batches[b]),
-        mode:batchMode,
-        token
-      }).toString();
-      const res=await fetch(GAS_URL+'?'+qs);
+
+      const res=await fetch(GAS_URL,{
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({
+          action:'importProducts',
+          products:batches[b],
+          mode:batchMode,
+          token
+        })
+      });
+
       const data=await res.json();
-      if(data.status!=='ok'){showToast(`第 ${b+1} 批匯入失敗：${data.message||'未知錯誤'}`,'error');return;}
+      if(!data||data.status!=='ok'){
+        showToast(`第 ${b+1} 批失敗：${data?.message||'未知錯誤'}`,'error');
+        return;
+      }
       totalAdded+=data.added||0;
       totalUpdated+=data.updated||0;
       totalDeactivated+=data.deactivated||0;
+      if(b<batches.length-1)await new Promise(r=>setTimeout(r,300));
     }
     closeModal('modal-import');
     await loadData();
