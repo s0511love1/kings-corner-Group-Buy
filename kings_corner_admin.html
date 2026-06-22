@@ -704,23 +704,13 @@ async function api(method,params){
 }
 async function apiPost(params){
   if(!GAS_URL){document.getElementById('gas-setup').classList.add('show');throw new Error('尚未設定 GAS URL');}
-  // 用 GET 傳所有參數（GAS 不支援跨域 POST）
-  const qs=new URLSearchParams({...flattenForGas(params),token}).toString();
-  const res=await fetch(GAS_URL+'?'+qs);
-  return res.json();
-}
-// 將巢狀物件轉為可用 GET 傳遞的格式
-function flattenForGas(params){
-  const out={};
-  Object.entries(params).forEach(([k,v])=>{
-    if(v!==null&&v!==undefined){
-      // Already stringified JSON → pass as-is; objects → stringify; primitives → String()
-      if(typeof v==='string') out[k]=v;
-      else if(typeof v==='object') out[k]=JSON.stringify(v);
-      else out[k]=String(v);
-    }
+  // 使用真正的 POST + JSON body，避免 URL 長度限制和 CORS 問題
+  const res=await fetch(GAS_URL,{
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({...params,token})
   });
-  return out;
+  return res.json();
 }
 
 function loading(show,text='載入中…'){
@@ -979,7 +969,7 @@ async function saveNoteTemplate(){
   const val=JSON.stringify({name:name.trim(),content});
   loading(true,'儲存範本…');
   try{
-    const data=await api('GET',{action:'saveMarketing',settings:JSON.stringify({[key]:val})});
+    const data=await apiPost({action:'saveMarketing',settings:{[key]:val}});
     if(data.status!=='ok'){showToast(data.message||'儲存失敗','error');return;}
     noteTemplates.push({key,idx:nextIdx,name:name.trim(),content});
     refreshNoteTemplateUI();
@@ -1141,7 +1131,7 @@ async function saveCampaign(){
   const campaign={id:editCampaignId||'',name,supplierId,deadline,minPeople:document.getElementById('c-min').value||10,discount:document.getElementById('c-discount').value||100,status:document.getElementById('c-status').value,note:document.getElementById('c-note').value.trim(),products:prods,allowedCodes:JSON.stringify(allowedCodes)};
   loading(true,'儲存中…');
   try{
-    const data=await apiPost({action:'saveCampaign',campaign:JSON.stringify(campaign)});
+    const data=await apiPost({action:'saveCampaign',campaign});
     if(data.status!=='ok'){showToast(data.message||'儲存失敗','error');return;}
     if(!editCampaignId)editCampaignId=data.id;
     document.getElementById('camp-link-input').value=buildCampLink(editCampaignId||campaign.id);
@@ -1504,7 +1494,7 @@ async function prodBatchActive(active){
     for(const id of ids){
       const p=products.find(x=>String(x.id)===String(id));
       if(!p)continue;
-      const data=await api('GET',{action:'saveProduct',product:JSON.stringify({...p,active:activeStr})});
+      const data=await apiPost({action:'saveProduct',product:{...p,active:activeStr}});
       if(data.status==='ok'){p.active=activeStr;updated++;}
     }
     clearProdSelection();
@@ -1525,10 +1515,10 @@ async function saveProduct(){
   const supplierId=document.getElementById('p-supplier').value;if(!supplierId){showToast('請選擇廠商','error');return;}
   const product={id:editProductId||'',supplierId,name,cat:document.getElementById('p-cat').value.trim(),price:document.getElementById('p-price').value||0,spec:document.getElementById('p-spec').value.trim(),img:document.getElementById('p-img').value.trim(),active:document.getElementById('p-active').value};
   loading(true,'儲存中…');
-  try{const data=await apiPost({action:'saveProduct',product:JSON.stringify(product)});if(data.status!=='ok'){showToast(data.message||'儲存失敗','error');return;}closeModal('modal-product');await loadData();showToast('商品已儲存 ✓');}
+  try{const data=await apiPost({action:'saveProduct',product});if(data.status!=='ok'){showToast(data.message||'儲存失敗','error');return;}closeModal('modal-product');await loadData();showToast('商品已儲存 ✓');}
   catch(e){showToast('儲存失敗','error');}finally{loading(false);}
 }
-async function toggleProductActive(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;const newActive=p.active==='false'?'true':'false';loading(true,'更新中…');try{const data=await apiPost({action:'saveProduct',product:JSON.stringify({...p,active:newActive})});if(data.status!=='ok'){showToast(data.message,'error');return;}p.active=newActive;renderProducts();showToast(newActive==='true'?'已啟用 ✓':'已停用');}catch(e){showToast('更新失敗','error');}finally{loading(false);}
+async function toggleProductActive(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;const newActive=p.active==='false'?'true':'false';loading(true,'更新中…');try{const data=await apiPost({action:'saveProduct',product:{...p,active:newActive}});if(data.status!=='ok'){showToast(data.message,'error');return;}p.active=newActive;renderProducts();showToast(newActive==='true'?'已啟用 ✓':'已停用');}catch(e){showToast('更新失敗','error');}finally{loading(false);}
 }
 async function deleteProduct(){if(!confirm('確定永久刪除？建議改用「停用」保留歷史資料。'))return;loading(true,'刪除中…');try{await apiPost({action:'deleteRecord',type:'product',id:editProductId});closeModal('modal-product');await loadData();showToast('商品已刪除');}catch(e){showToast('刪除失敗','error');}finally{loading(false);}
 }
@@ -1642,7 +1632,7 @@ let editSupplierId=null;
 function renderSuppliers(){document.getElementById('suppliers-table').innerHTML=suppliers.length?`<table><thead><tr><th>廠商</th><th>分類</th><th>聯絡</th><th>備註</th><th>團購次數</th><th></th></tr></thead><tbody>`+suppliers.map(s=>{const cnt=campaigns.filter(c=>String(c.supplierId)===String(s.id)).length;return`<tr><td style="font-weight:700">${s.name}</td><td><span class="badge badge-cat">${s.cat}</span></td><td style="font-size:12px;color:var(--muted)">${s.contact||'—'}</td><td style="font-size:12px;color:var(--muted)">${s.note||'—'}</td><td><span style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--gold)">${cnt}</span></td><td><button class="btn btn-outline btn-sm" onclick="editSupplier('${s.id}')">編輯</button></td></tr>`;}).join('')+'</tbody></table>':`<div class="empty"><div class="empty-icon">🏭</div><p>尚無廠商</p></div>`;}
 function openNewSupplier(){editSupplierId=null;document.getElementById('ms-title').textContent='新增廠商';['s-name','s-cat','s-contact','s-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('modal-supplier').classList.add('show');}
 function editSupplier(id){const s=suppliers.find(x=>String(x.id)===String(id));if(!s)return;editSupplierId=id;document.getElementById('ms-title').textContent='編輯廠商';document.getElementById('s-name').value=s.name;document.getElementById('s-cat').value=s.cat||'';document.getElementById('s-contact').value=s.contact||'';document.getElementById('s-note').value=s.note||'';document.getElementById('modal-supplier').classList.add('show');}
-async function saveSupplier(){const name=document.getElementById('s-name').value.trim();if(!name){showToast('請輸入廠商名稱','error');return;}const supplier={id:editSupplierId||'',name,cat:document.getElementById('s-cat').value.trim(),contact:document.getElementById('s-contact').value.trim(),note:document.getElementById('s-note').value.trim()};loading(true,'儲存中…');try{const data=await apiPost({action:'saveSupplier',supplier:JSON.stringify(supplier)});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-supplier');await loadData();showToast('廠商已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
+async function saveSupplier(){const name=document.getElementById('s-name').value.trim();if(!name){showToast('請輸入廠商名稱','error');return;}const supplier={id:editSupplierId||'',name,cat:document.getElementById('s-cat').value.trim(),contact:document.getElementById('s-contact').value.trim(),note:document.getElementById('s-note').value.trim()};loading(true,'儲存中…');try{const data=await apiPost({action:'saveSupplier',supplier});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-supplier');await loadData();showToast('廠商已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
 }
 
 // ── PROMO CODES ──
@@ -1782,7 +1772,7 @@ async function savePromo(){
   };
   loading(true,'儲存中…');
   try{
-    const data=await api('GET',{action:'savePromoCode',promoCode:JSON.stringify(promoCode)});
+    const data=await apiPost({action:'savePromoCode',promoCode});
     if(data.status!=='ok'){showToast(data.message,'error');return;}
     closeModal('modal-promo');await loadData();showToast('優惠碼已儲存 ✓');
   }catch(e){showToast('儲存失敗','error');}finally{loading(false);}
@@ -1791,7 +1781,7 @@ async function deletePromo(){
   if(!confirm('確定刪除此優惠碼？'))return;
   loading(true,'刪除中…');
   try{
-    await api('GET',{action:'deletePromoCode',id:editPromoId});
+    await apiPost({action:'deletePromoCode',id:editPromoId});
     closeModal('modal-promo');await loadData();showToast('已刪除');
   }catch(e){showToast('刪除失敗','error');}finally{loading(false);}
 }
@@ -1802,16 +1792,16 @@ function adCardHtml(supId,ad,idx,total){return`<div style="display:flex;align-it
 function openNewAd(supId){editAdSupplierId=supId;editAdId=null;document.getElementById('mad-title').textContent='新增廣告';['ad-img','ad-title','ad-sub','ad-link'].forEach(id=>document.getElementById(id).value='');document.getElementById('ad-active').value='true';document.getElementById('ad-img-preview').style.display='none';document.getElementById('ad-delete-btn').style.display='none';document.getElementById('modal-ad').classList.add('show');}
 function openEditAd(supId,adId){editAdSupplierId=supId;editAdId=adId;const slides=adsData[supId]||[];const ad=slides.find(a=>a.id===adId);if(!ad)return;document.getElementById('mad-title').textContent='編輯廣告';document.getElementById('ad-img').value=ad.img||'';document.getElementById('ad-title').value=ad.title||'';document.getElementById('ad-sub').value=ad.sub||'';document.getElementById('ad-link').value=ad.link||'';document.getElementById('ad-active').value=String(ad.active!==false);const thumb=document.getElementById('ad-img-thumb');if(ad.img){thumb.src=ad.img;document.getElementById('ad-img-preview').style.display='block';}else{document.getElementById('ad-img-preview').style.display='none';}document.getElementById('ad-delete-btn').style.display='inline-flex';document.getElementById('modal-ad').classList.add('show');}
 function previewAdImg(){const url=document.getElementById('ad-img').value.trim();const thumb=document.getElementById('ad-img-thumb');const preview=document.getElementById('ad-img-preview');if(url){thumb.src=url;preview.style.display='block';}else{preview.style.display='none';}}
-async function saveAd(){const img=document.getElementById('ad-img').value.trim();const title=document.getElementById('ad-title').value.trim();if(!title&&!img){showToast('請填寫標題或圖片網址','error');return;}if(!adsData[editAdSupplierId])adsData[editAdSupplierId]=[];const slides=adsData[editAdSupplierId];const active=document.getElementById('ad-active').value==='true';const adObj={img,title,sub:document.getElementById('ad-sub').value.trim(),link:document.getElementById('ad-link').value.trim(),active};if(editAdId){const ad=slides.find(a=>a.id===editAdId);if(ad)Object.assign(ad,adObj);}else{adObj.id='ad'+Date.now();slides.push(adObj);}loading(true,'儲存廣告…');try{const data=await apiPost({action:'saveAds',supplierId:editAdSupplierId,slides:JSON.stringify(slides)});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-ad');renderAdsPage();showToast('廣告已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
+async function saveAd(){const img=document.getElementById('ad-img').value.trim();const title=document.getElementById('ad-title').value.trim();if(!title&&!img){showToast('請填寫標題或圖片網址','error');return;}if(!adsData[editAdSupplierId])adsData[editAdSupplierId]=[];const slides=adsData[editAdSupplierId];const active=document.getElementById('ad-active').value==='true';const adObj={img,title,sub:document.getElementById('ad-sub').value.trim(),link:document.getElementById('ad-link').value.trim(),active};if(editAdId){const ad=slides.find(a=>a.id===editAdId);if(ad)Object.assign(ad,adObj);}else{adObj.id='ad'+Date.now();slides.push(adObj);}loading(true,'儲存廣告…');try{const data=await apiPost({action:'saveAds',supplierId:editAdSupplierId,slides});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-ad');renderAdsPage();showToast('廣告已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
 }
 async function deleteAd(){if(!confirm('確定刪除？'))return;const slides=adsData[editAdSupplierId];if(!slides)return;const idx=slides.findIndex(a=>a.id===editAdId);if(idx>=0)slides.splice(idx,1);loading(true,'刪除中…');try{await apiPost({action:'saveAds',supplierId:editAdSupplierId,slides});closeModal('modal-ad');renderAdsPage();showToast('廣告已刪除');}catch(e){showToast('刪除失敗','error');}finally{loading(false);}
 }
-async function moveAd(supId,adId,dir){const slides=adsData[supId];if(!slides)return;const idx=slides.findIndex(a=>a.id===adId);const ni=idx+dir;if(ni<0||ni>=slides.length)return;[slides[idx],slides[ni]]=[slides[ni],slides[idx]];try{await apiPost({action:'saveAds',supplierId:supId,slides:JSON.stringify(slides)});renderAdsPage();}catch(e){}}
+async function moveAd(supId,adId,dir){const slides=adsData[supId];if(!slides)return;const idx=slides.findIndex(a=>a.id===adId);const ni=idx+dir;if(ni<0||ni>=slides.length)return;[slides[idx],slides[ni]]=[slides[ni],slides[idx]];try{await apiPost({action:'saveAds',supplierId:supId,slides});renderAdsPage();}catch(e){}}
 
 function renderMarketingPage(){const m=marketingSettings;document.getElementById('mkt-boost-enabled').checked=m.boostEnabled!==false;document.getElementById('mkt-marquee-enabled').checked=m.marqueeEnabled!==false;document.getElementById('mkt-recent-enabled').checked=m.recentEnabled!==false;document.getElementById('mkt-badge-enabled').checked=m.badgeEnabled!==false;document.getElementById('mkt-hot-threshold').value=m.hotThreshold||15;document.getElementById('mkt-top-enabled').checked=m.topEnabled!==false;document.getElementById('mkt-marquee-text').value=m.marqueeText||'';document.getElementById('mkt-fake-names').value=(m.fakeNames||[]).join('\n');renderBoostTable();}
 function renderBoostTable(){const active=campaigns.filter(c=>c.status==='active');if(!active.length){document.getElementById('mkt-campaigns-table').innerHTML=`<div class="empty"><div class="empty-icon">🛒</div><p>目前沒有進行中的團購</p></div>`;return;}const boosts=marketingSettings.campaignBoost||{};document.getElementById('mkt-campaigns-table').innerHTML=`<table><thead><tr><th>團購名稱</th><th>廠商</th><th>起始人氣</th><th>成長間隔（小時）</th><th>目前顯示人數</th></tr></thead><tbody>`+active.map(c=>{const b=boosts[c.id]||{base:0,growthHours:0};const real=orders.filter(o=>String(o.campaignId)===String(c.id)).length;const display=real+parseInt(b.base||0);return`<tr><td style="font-weight:700">${c.name}</td><td style="font-size:11px;color:var(--muted)">${supName(c.supplierId)}</td><td><input type="number" class="mkt-input" min="0" max="50" value="${b.base||0}" onchange="updateBoost('${c.id}','base',this.value)" style="width:70px"></td><td><input type="number" class="mkt-input" min="0" max="168" value="${b.growthHours||0}" onchange="updateBoost('${c.id}','growthHours',this.value)" style="width:80px"></td><td><span style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:#5dca8a">${display}</span> 人</td></tr>`;}).join('')+'</tbody></table>';}
 function updateBoost(cid,field,val){if(!marketingSettings.campaignBoost)marketingSettings.campaignBoost={};if(!marketingSettings.campaignBoost[cid])marketingSettings.campaignBoost[cid]={base:0,growthHours:0};marketingSettings.campaignBoost[cid][field]=parseInt(val)||0;renderBoostTable();}
-async function saveMarketingSettings(){const fakeNames=document.getElementById('mkt-fake-names').value.split('\n').map(n=>n.trim()).filter(Boolean);const settings={boostEnabled:String(document.getElementById('mkt-boost-enabled').checked),marqueeEnabled:String(document.getElementById('mkt-marquee-enabled').checked),recentEnabled:String(document.getElementById('mkt-recent-enabled').checked),badgeEnabled:String(document.getElementById('mkt-badge-enabled').checked),hotThreshold:document.getElementById('mkt-hot-threshold').value,topEnabled:String(document.getElementById('mkt-top-enabled').checked),marqueeText:document.getElementById('mkt-marquee-text').value.trim(),fakeNames:JSON.stringify(fakeNames),campaignBoost:JSON.stringify(marketingSettings.campaignBoost||{})};loading(true,'儲存中…');try{const data=await apiPost({action:'saveMarketing',settings:JSON.stringify(settings)});if(data.status!=='ok'){showToast(data.message,'error');return;}marketingSettings={...marketingSettings,...settings,fakeNames,hotThreshold:parseInt(settings.hotThreshold)};showToast('行銷設定已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
+async function saveMarketingSettings(){const fakeNames=document.getElementById('mkt-fake-names').value.split('\n').map(n=>n.trim()).filter(Boolean);const settings={boostEnabled:String(document.getElementById('mkt-boost-enabled').checked),marqueeEnabled:String(document.getElementById('mkt-marquee-enabled').checked),recentEnabled:String(document.getElementById('mkt-recent-enabled').checked),badgeEnabled:String(document.getElementById('mkt-badge-enabled').checked),hotThreshold:document.getElementById('mkt-hot-threshold').value,topEnabled:String(document.getElementById('mkt-top-enabled').checked),marqueeText:document.getElementById('mkt-marquee-text').value.trim(),fakeNames:JSON.stringify(fakeNames),campaignBoost:JSON.stringify(marketingSettings.campaignBoost||{})};loading(true,'儲存中…');try{const data=await apiPost({action:'saveMarketing',settings});if(data.status!=='ok'){showToast(data.message,'error');return;}marketingSettings={...marketingSettings,...settings,fakeNames,hotThreshold:parseInt(settings.hotThreshold)};showToast('行銷設定已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
 }
 const SURNAMES=['張','李','王','陳','林','黃','吳','鄭','許','劉','蔡','楊','賴','謝','洪','邱','蘇','周','葉','何'];
 const CHARS=['志','美','佳','雅','宗','建','淑','明','穎','豪','偉','慧','芬','翰','君','惠','玲','國','華','宏'];
@@ -1822,7 +1812,7 @@ let editAccountId=null;
 function renderAccounts(){const q=(document.getElementById('acc-search')?.value||'').toLowerCase();const rf=document.getElementById('acc-filter-role')?.value||'';const list=accounts.filter(a=>(!q||a.user?.toLowerCase().includes(q)||a.name?.toLowerCase().includes(q))&&(!rf||a.role===rf));if(!list.length){document.getElementById('accounts-table').innerHTML=`<div class="empty"><div class="empty-icon">👤</div><p>沒有符合的帳號</p></div>`;return;}document.getElementById('accounts-table').innerHTML=`<table><thead><tr><th>姓名 / 帳號</th><th>角色</th><th>狀態</th><th>建立日期</th><th>操作</th></tr></thead><tbody>`+list.map(a=>`<tr><td><div style="font-weight:700">${a.name}</div><div style="font-size:11px;color:var(--muted);font-family:monospace">${a.user}</div></td><td><span class="badge ${a.role==='root'?'badge-active':a.role==='helper'?'badge-draft':''}" style="${a.role==='admin'?'background:#1a2a3d;color:#6eb4ff;border:1px solid #2e4d6e':''}">${a.role?.toUpperCase()}</span></td><td>${a.active==='true'?'<span class="badge badge-active">啟用</span>':'<span class="badge badge-closed">停用</span>'}</td><td style="font-size:11px;color:var(--faint)">${a.createdAt||'—'}</td><td><button class="btn btn-outline btn-sm" onclick="openEditAccount('${a.id}')">編輯</button></td></tr>`).join('')+'</tbody></table>';}
 function openNewAccount(){editAccountId=null;document.getElementById('ma-title').textContent='新增帳號';['a-name','a-user','a-pass','a-pass2'].forEach(id=>document.getElementById(id).value='');document.getElementById('a-role').value='helper';document.getElementById('a-active').value='true';document.getElementById('a-user').disabled=false;document.getElementById('a-pass-hint').style.display='none';document.getElementById('a-delete-btn').style.display='none';document.getElementById('modal-account').classList.add('show');}
 function openEditAccount(id){const a=accounts.find(x=>String(x.id)===String(id));if(!a)return;editAccountId=id;document.getElementById('ma-title').textContent='編輯帳號';document.getElementById('a-name').value=a.name;document.getElementById('a-user').value=a.user;document.getElementById('a-user').disabled=true;document.getElementById('a-pass').value='';document.getElementById('a-pass2').value='';document.getElementById('a-role').value=a.role;document.getElementById('a-active').value=a.active;document.getElementById('a-pass-hint').style.display='inline';document.getElementById('a-delete-btn').style.display=a.role!=='root'?'inline-flex':'none';document.getElementById('modal-account').classList.add('show');}
-async function saveAccount(){const name=document.getElementById('a-name').value.trim();const user=document.getElementById('a-user').value.trim();const pass=document.getElementById('a-pass').value;const pass2=document.getElementById('a-pass2').value;if(!name){showToast('請輸入姓名','error');return;}if(!editAccountId&&!user){showToast('請輸入帳號','error');return;}if(pass&&pass!==pass2){showToast('兩次密碼不一致','error');return;}if(pass&&pass.length<4){showToast('密碼至少 4 個字元','error');return;}const account={id:editAccountId||'',user,name,pass:pass||'',role:document.getElementById('a-role').value,active:document.getElementById('a-active').value};loading(true,'儲存中…');try{const data=await apiPost({action:'saveAccount',account:JSON.stringify(account)});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-account');await loadData();showToast('帳號已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
+async function saveAccount(){const name=document.getElementById('a-name').value.trim();const user=document.getElementById('a-user').value.trim();const pass=document.getElementById('a-pass').value;const pass2=document.getElementById('a-pass2').value;if(!name){showToast('請輸入姓名','error');return;}if(!editAccountId&&!user){showToast('請輸入帳號','error');return;}if(pass&&pass!==pass2){showToast('兩次密碼不一致','error');return;}if(pass&&pass.length<4){showToast('密碼至少 4 個字元','error');return;}const account={id:editAccountId||'',user,name,pass:pass||'',role:document.getElementById('a-role').value,active:document.getElementById('a-active').value};loading(true,'儲存中…');try{const data=await apiPost({action:'saveAccount',account});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-account');await loadData();showToast('帳號已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
 }
 async function deleteAccount(){if(!confirm('確定要刪除此帳號？'))return;loading(true,'刪除中…');try{await apiPost({action:'deleteRecord',type:'account',id:editAccountId});closeModal('modal-account');await loadData();showToast('帳號已刪除');}catch(e){showToast('刪除失敗','error');}finally{loading(false);}
 }
