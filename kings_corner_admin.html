@@ -1537,12 +1537,38 @@ function openImportCSV(){csvParsedRows=[];document.getElementById('csv-file-name
 function updateImportModeDesc(){const mode=document.getElementById('import-mode')?.value;const desc={upsert:'新增不存在的，更新已存在的，其他不動。',replace_supplier:'CSV廠商的商品，不在CSV裡的自動停用。其他廠商不受影響。',rebuild:'⚠️ 清空全部後重新匯入。'};const el=document.getElementById('import-mode-desc');if(el)el.textContent=desc[mode]||'';}
 function handleCsvDrop(e){e.preventDefault();document.getElementById('csv-drop-zone').classList.remove('drag');const file=e.dataTransfer.files[0];if(file)parseCsvFile(file);}
 function handleCsvFile(input){const file=input.files[0];if(file)parseCsvFile(file);}
+function parseCSVRow(row){
+  // Properly handle quoted fields containing commas
+  const cols=[];let cur='',inQ=false;
+  for(let i=0;i<row.length;i++){
+    const ch=row[i];
+    if(ch==='"'){
+      if(inQ&&row[i+1]==='"'){cur+='"';i++;}  // escaped quote
+      else{inQ=!inQ;}
+    } else if(ch===','&&!inQ){
+      cols.push(cur.trim());cur='';
+    } else {cur+=ch;}
+  }
+  cols.push(cur.trim());
+  return cols;
+}
+
 function parseCsvFile(file){
   document.getElementById('csv-file-name').textContent=file.name;
   const reader=new FileReader();
   reader.onload=e=>{
     const rows=e.target.result.split(/[\r\n]+/).filter(r=>r.trim());
-    const dataRows=rows.slice(1).map(row=>{const cols=[];let cur='',inQ=false;for(const ch of row){if(ch==='"'){inQ=!inQ;}else if(ch===','&&!inQ){cols.push(cur.trim());cur='';}else{cur+=ch;}}cols.push(cur.trim());return{supplierName:(cols[0]||'').trim(),cat:(cols[1]||'').trim(),name:(cols[2]||'').trim(),spec:(cols[3]||'').trim(),price:parseFloat(cols[4])||0,img:(cols[5]||'').trim()};}).filter(r=>r.name&&r.supplierName);
+    const dataRows=rows.slice(1).map(row=>{
+      const cols=parseCSVRow(row);
+      return{
+        supplierName:(cols[0]||'').trim(),
+        cat:(cols[1]||'').trim(),
+        name:(cols[2]||'').trim(),
+        spec:(cols[3]||'').trim(),
+        price:parseFloat(cols[4])||0,
+        img:(cols[5]||'').trim()
+      };
+    }).filter(r=>r.name&&r.supplierName);
     csvParsedRows=dataRows;
     document.getElementById('csv-preview').style.display='block';
     document.getElementById('csv-count-label').textContent=`共解析 ${dataRows.length} 筆`;
@@ -1553,10 +1579,31 @@ function parseCsvFile(file){
 async function confirmImport(){
   if(!csvParsedRows.length){showToast('沒有可匯入的資料','error');return;}
   const mode=document.getElementById('import-mode').value;
-  const prods=csvParsedRows.map(r=>{const sup=suppliers.find(s=>s.name===r.supplierName);return{supplierId:sup?String(sup.id):'',supplierName:r.supplierName,...r};});
+  // Map supplier names to IDs, warn if not found
+  const missingSuppliers=new Set();
+  const prods=csvParsedRows.map(r=>{
+    const sup=suppliers.find(s=>s.name===r.supplierName);
+    if(!sup)missingSuppliers.add(r.supplierName);
+    return{supplierId:sup?String(sup.id):'__new__'+r.supplierName,supplierName:r.supplierName,...r};
+  });
+
+  // Warn about missing suppliers but still proceed (GAS will auto-create)
+  if(missingSuppliers.size>0){
+    const names=[...missingSuppliers].join('、');
+    if(!confirm(`以下廠商在系統中不存在，將自動建立：\n${names}\n\n確定繼續匯入嗎？`))return;
+  }
+
   loading(true,'匯入中…');
-  try{const data=await apiPost({action:'importProducts',products:JSON.stringify(prods),mode});if(data.status!=='ok'){showToast(data.message||'匯入失敗','error');return;}closeModal('modal-import');await loadData();showToast(`匯入完成：新增 ${data.added}，更新 ${data.updated}${data.deactivated?`，停用 ${data.deactivated}`:''}  ✓`);}
-  catch(e){showToast('匯入失敗','error');}finally{loading(false);}
+  try{
+    const data=await apiPost({action:'importProducts',products:JSON.stringify(prods),mode});
+    if(data.status!=='ok'){showToast(data.message||'匯入失敗','error');return;}
+    closeModal('modal-import');
+    await loadData();
+    showToast(`匯入完成：新增 ${data.added}，更新 ${data.updated}${data.deactivated?`，停用 ${data.deactivated}`:''}  ✓`);
+  }catch(e){
+    console.error('Import error:',e);
+    showToast('匯入失敗：'+e.message,'error');
+  }finally{loading(false);}
 }
 function downloadCsvTemplate(){const csv='廠商名稱,分類,商品名稱,規格,建議單價,圖片網址\n初雞,雞胸肉,鹽味雞胸,180g ±5%,70,\n初雞,雞腿排,蔥鹽雞腿排,160g ±5%,85,\n逢國食品,餅乾,CROWN 原味營養餅200g,200g,69,\n';const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));a.download='kings_corner_商品範本.csv';a.click();}
 
