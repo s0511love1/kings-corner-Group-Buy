@@ -151,7 +151,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 .notice-box{padding:11px;background:#fff8e6;border-radius:8px;font-size:12px;color:#5d4037;line-height:1.7;border:1px solid #ffe082;margin-bottom:80px}
 
 /* Cart */
-.cart-bar{position:fixed;bottom:0;left:0;right:0;background:white;border-top:2px solid #e8e4e0;padding:11px 16px;z-index:200;box-shadow:0 -4px 20px rgba(0,0,0,0.1)}
+.cart-bar{position:fixed;bottom:0;left:0;right:0;background:white;border-top:2px solid #e8e4e0;padding:12px 16px 16px;z-index:200;box-shadow:0 -4px 20px rgba(0,0,0,0.1)}
 .cart-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;gap:8px}
 .cart-chips-wrap{display:flex;flex-wrap:wrap;gap:4px;flex:1;max-height:42px;overflow:hidden}
 .cart-chip-item{background:#fff0f0;color:#9b1b20;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px}
@@ -333,7 +333,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 
 <!-- ORDER PAGE -->
 <div id="order-page">
-  <div class="main" style="padding-top:18px;padding-bottom:0">
+  <div class="main" style="padding-top:18px;padding-bottom:140px">
     <button class="back-btn" onclick="goHome()">← 回到首頁</button>
     <div class="order-top" id="order-top"></div>
     <div class="cd-strip">
@@ -665,10 +665,16 @@ async function applyPromoCode(){
       resultEl.innerHTML=`<span style="color:#ff8080">❌ ${data.message||'無效優惠碼'}</span>`;
     }else{
       appliedPromo=data;
-      let cfg={};try{cfg=JSON.parse(data.discountValue||'{}');}catch(e){cfg={value:data.discountValue};}
+      let cfg={};
+      try{
+        const dv=data.discountValue;
+        if(typeof dv==='string'&&dv.startsWith('{'))cfg=JSON.parse(dv);
+        else if(typeof dv==='object'&&dv!==null)cfg=dv;
+        else cfg={value:dv};
+      }catch(e){cfg={value:data.discountValue};}
       let label='純追蹤（不改變價格）';
       if(data.discountType==='percent')label=`${cfg.value||'?'}折優惠`;
-      else if(data.discountType==='amount_per_unit')label=`每份折 $${cfg.perUnit||'?'}`;
+      else if(data.discountType==='amount_per_unit')label=`每份折 $${cfg.perUnit||cfg.value||'?'}`;
       else if(data.discountType==='amount_threshold')label=`滿$${cfg.threshold||'?'}折$${cfg.off||'?'}`;
       resultEl.innerHTML=`<span style="color:#5dca8a">✅ ${data.name}・${label}</span>`;
       document.getElementById('f-promo').value=data.code;
@@ -688,21 +694,27 @@ function getEffectiveDiscount(){
   return (currentCampaign?.discount||100)/100;
 }
 
+function parsePromoConfig(dv){
+  if(!dv)return{};
+  if(typeof dv==='object'&&dv!==null)return dv;
+  try{
+    if(typeof dv==='string'&&(dv.startsWith('{')||dv.startsWith('['))){return JSON.parse(dv);}
+  }catch(e){}
+  return{value:dv};
+}
+
 function calcDiscountedTotal(subtotal, totalQty){
-  // subtotal = sum of (price * qty) before any discount
   if(!appliedPromo||appliedPromo.discountType==='none'){
     return Math.round(subtotal*(currentCampaign?.discount||100)/100);
   }
-  let cfg={};
-  try{cfg=JSON.parse(appliedPromo.discountValue||'{}');}catch(e){cfg={value:appliedPromo.discountValue};}
+  const cfg=parsePromoConfig(appliedPromo.discountValue);
 
   if(appliedPromo.discountType==='percent'){
     const pct=parseFloat(cfg.value||100)/100;
     return Math.round(subtotal*pct);
   }
   if(appliedPromo.discountType==='amount_per_unit'){
-    const perUnit=parseFloat(cfg.perUnit||0);
-    // Apply campaign base discount first, then subtract per-unit amount
+    const perUnit=parseFloat(cfg.perUnit||cfg.value||0);
     const base=Math.round(subtotal*(currentCampaign?.discount||100)/100);
     return Math.max(0, base - Math.round(perUnit*totalQty));
   }
