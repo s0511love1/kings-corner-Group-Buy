@@ -926,9 +926,9 @@ async function campBatchStatus(status){
 
 function campsTableHtml(list, showCheckbox=false){
   if(!list.length)return`<div class="empty"><div class="empty-icon">🛒</div><p>沒有符合的團購</p></div>`;
-  return`<table><thead><tr>
+  return`<table style="table-layout:fixed;width:100%"><thead><tr>
     ${showCheckbox?`<th style="width:36px"><input type="checkbox" id="camp-select-all" onchange="toggleCampSelectAll(this)" style="cursor:pointer;width:16px;height:16px"></th>`:''}
-    <th>名稱</th><th>廠商</th><th>截止</th><th>訂單</th><th>品項庫存</th><th>狀態</th><th>操作</th>
+    <th style="width:180px">名稱</th><th style="width:90px">廠商</th><th style="width:110px">截止</th><th style="width:70px">訂單</th><th style="width:180px">品項庫存</th><th style="width:90px">狀態</th><th style="width:130px">操作</th>
   </tr></thead><tbody>`+
   list.map(c=>{
     const cnt=orders.filter(o=>String(o.campaignId)===String(c.id)).length;
@@ -945,18 +945,17 @@ function campsTableHtml(list, showCheckbox=false){
       return`<div style="font-size:10px;margin-bottom:1px;white-space:nowrap"><span style="color:var(--muted)">${p.name.slice(0,5)}${p.name.length>5?'…':''}</span> ${label}</div>`;
     }).join(''):'<span style="color:var(--faint);font-size:11px">無品項</span>';
 
+        const cellS="vertical-align:top;border-bottom:1px solid var(--border);padding:10px 12px;";
     return`<tr id="crow-${c.id}" style="${selectedCampIds.has(String(c.id))?'background:rgba(201,168,76,0.08)':''}">
-      ${showCheckbox?`<td><input type="checkbox" class="camp-check" data-id="${c.id}" ${selectedCampIds.has(String(c.id))?'checked':''} onchange="toggleCampSelect(this)" style="cursor:pointer;width:16px;height:16px"></td>`:''}
-      <td style="font-weight:700">${c.name}</td>
-      <td><span class="badge badge-cat">${supName(c.supplierId)}</span></td>
-      <td style="font-size:12px">${c.deadline}<br>${daysLeft(c.deadline,c.status)}</td>
-      <td><span style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--gold)">${cnt}</span><span style="font-size:10px;color:var(--muted);display:block">筆訂單</span></td>
-      <td style="max-width:160px;font-size:11px">${stockHtml}</td>
-      <td>${statusBadge(c.status)}</td>
-      <td style="white-space:nowrap;display:flex;gap:6px">
-        <button class="btn btn-outline btn-sm" onclick="editCampaign('${c.id}')">編輯</button>
-        <button class="btn btn-outline btn-sm" onclick="showCampLink('${c.id}')">連結</button>
-      </td></tr>`;
+      ${showCheckbox?`<td style="${cellS}width:36px"><input type="checkbox" class="camp-check" data-id="${c.id}" ${selectedCampIds.has(String(c.id))?'checked':''} onchange="toggleCampSelect(this)" style="cursor:pointer;width:16px;height:16px"></td>`:''}
+      <td style="${cellS}font-weight:700">${c.name}</td>
+      <td style="${cellS}"><span class="badge badge-cat">${supName(c.supplierId)}</span></td>
+      <td style="${cellS}font-size:12px">${c.deadline}<br>${daysLeft(c.deadline,c.status)}</td>
+      <td style="${cellS}"><span style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--gold)">${cnt}</span><span style="font-size:10px;color:var(--muted);display:block">筆訂單</span></td>
+      <td style="${cellS}width:160px"><div style="max-height:72px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent">${stockHtml}</div></td>
+      <td style="${cellS}">${statusBadge(c.status)}</td>
+      <td style="${cellS}white-space:nowrap"><div style="display:flex;gap:6px;flex-wrap:nowrap"><button class="btn btn-outline btn-sm" onclick="editCampaign('${c.id}')">編輯</button><button class="btn btn-outline btn-sm" onclick="showCampLink('${c.id}')">連結</button></div></td>
+    </tr>`;
   }).join('')+'</tbody></table>';
 }
 function renderCampaigns(){
@@ -1199,10 +1198,15 @@ async function saveCampaign(){
   try{
     const data=await apiPost({action:'saveCampaign',campaign});
     if(data.status!=='ok'){showToast(data.message||'儲存失敗','error');return;}
-    if(!editCampaignId)editCampaignId=data.id;
-    document.getElementById('camp-link-input').value=buildCampLink(editCampaignId||campaign.id);
+    const savedId=data.id||editCampaignId||campaign.id;
+    if(!editCampaignId)editCampaignId=savedId;
+    document.getElementById('camp-link-input').value=buildCampLink(savedId);
     document.getElementById('camp-link-section').style.display='block';
-    showWizardStep(3);await loadData();showToast(`已儲存，共 ${prods.length} 個品項 ✓`);
+    showWizardStep(3);
+    await loadData();
+    showToast(`✓ 已儲存「${name}」，共 ${prods.length} 個品項`);
+    // Auto-close after 2 seconds
+    setTimeout(()=>closeModal('modal-campaign'),2000);
   }catch(e){showToast('儲存失敗：'+e.message,'error');}finally{loading(false);}
 }
 function buildCampLink(id){
