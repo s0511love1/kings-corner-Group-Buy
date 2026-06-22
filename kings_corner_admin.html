@@ -1593,13 +1593,34 @@ async function confirmImport(){
     if(!confirm(`以下廠商在系統中不存在，將自動建立：\n${names}\n\n確定繼續匯入嗎？`))return;
   }
 
-  loading(true,'匯入中…');
+  loading(true,`匯入中… (共 ${prods.length} 筆)`);
   try{
-    const data=await apiPost({action:'importProducts',products:JSON.stringify(prods),mode});
-    if(data.status!=='ok'){showToast(data.message||'匯入失敗','error');return;}
+    // Split into batches of 30 to avoid URL length limit
+    const BATCH=30;
+    let totalAdded=0,totalUpdated=0,totalDeactivated=0;
+    const batches=[];
+    for(let i=0;i<prods.length;i+=BATCH)batches.push(prods.slice(i,i+BATCH));
+
+    for(let b=0;b<batches.length;b++){
+      loading(true,`匯入中… ${b*BATCH+1}–${Math.min((b+1)*BATCH,prods.length)} / ${prods.length}`);
+      // First batch uses selected mode, subsequent batches always upsert
+      const batchMode=b===0?mode:'upsert';
+      const qs=new URLSearchParams({
+        action:'importProducts',
+        products:JSON.stringify(batches[b]),
+        mode:batchMode,
+        token
+      }).toString();
+      const res=await fetch(GAS_URL+'?'+qs);
+      const data=await res.json();
+      if(data.status!=='ok'){showToast(`第 ${b+1} 批匯入失敗：${data.message||'未知錯誤'}`,'error');return;}
+      totalAdded+=data.added||0;
+      totalUpdated+=data.updated||0;
+      totalDeactivated+=data.deactivated||0;
+    }
     closeModal('modal-import');
     await loadData();
-    showToast(`匯入完成：新增 ${data.added}，更新 ${data.updated}${data.deactivated?`，停用 ${data.deactivated}`:''}  ✓`);
+    showToast(`匯入完成：新增 ${totalAdded}，更新 ${totalUpdated}${totalDeactivated?`，停用 ${totalDeactivated}`:''}  ✓`);
   }catch(e){
     console.error('Import error:',e);
     showToast('匯入失敗：'+e.message,'error');
