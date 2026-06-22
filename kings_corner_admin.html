@@ -225,10 +225,18 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     </div>
     <div class="page" id="page-campaigns">
       <div class="topbar"><div class="page-title">團購管理</div><button class="btn btn-gold" onclick="openNewCampaign()">＋ 新增團購</button></div>
+      <!-- Batch bar for campaigns -->
+      <div id="camp-batch-bar" style="display:none;background:var(--dark3);border:1px solid var(--gold);border-radius:8px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:10px;flex-wrap:wrap">
+        <span id="camp-batch-count" style="font-size:13px;color:var(--gold);font-weight:700">已選 0 個</span>
+        <button class="btn btn-gold btn-sm" onclick="campBatchStatus('active')">▶ 設為進行中</button>
+        <button class="btn btn-outline btn-sm" onclick="campBatchStatus('draft')">⏸ 設為草稿/暫停</button>
+        <button class="btn btn-danger btn-sm" onclick="campBatchStatus('closed')">⏹ 設為已結束</button>
+        <button class="btn btn-outline btn-sm" onclick="clearCampSelection()" style="margin-left:auto">取消選取</button>
+      </div>
       <div class="toolbar">
         <div class="search-wrap"><input type="text" id="camp-search" placeholder="搜尋團購名稱" oninput="renderCampaigns()"></div>
         <select id="camp-filter-supplier" onchange="renderCampaigns()"><option value="">所有廠商</option></select>
-        <select id="camp-filter-status" onchange="renderCampaigns()"><option value="">全部狀態</option><option value="active">進行中</option><option value="draft">草稿</option></select>
+        <select id="camp-filter-status" onchange="renderCampaigns()"><option value="">全部狀態</option><option value="active">進行中</option><option value="draft">草稿/暫停</option><option value="closed">已結束</option></select>
       </div>
       <div class="table-wrap overflow-x" id="campaigns-table"></div>
     </div>
@@ -865,9 +873,63 @@ function renderDashboard(){
   document.getElementById('dash-recent-table').innerHTML=ordersTableHtml(recent,true);
 }
 
-function campsTableHtml(list){
+let selectedCampIds=new Set();
+
+function toggleCampSelect(cb){
+  const id=cb.dataset.id;
+  if(cb.checked)selectedCampIds.add(id);else selectedCampIds.delete(id);
+  const row=document.getElementById('crow-'+id);
+  if(row)row.style.background=cb.checked?'rgba(201,168,76,0.08)':'';
+  updateCampBatchBar();
+}
+function toggleCampSelectAll(cb){
+  document.querySelectorAll('.camp-check').forEach(c=>{
+    c.checked=cb.checked;const id=c.dataset.id;
+    if(cb.checked)selectedCampIds.add(id);else selectedCampIds.delete(id);
+    const row=document.getElementById('crow-'+id);
+    if(row)row.style.background=cb.checked?'rgba(201,168,76,0.08)':'';
+  });
+  updateCampBatchBar();
+}
+function clearCampSelection(){
+  selectedCampIds.clear();
+  document.querySelectorAll('.camp-check').forEach(c=>c.checked=false);
+  const allCb=document.getElementById('camp-select-all');
+  if(allCb)allCb.checked=false;
+  document.querySelectorAll('[id^="crow-"]').forEach(r=>r.style.background='');
+  updateCampBatchBar();
+}
+function updateCampBatchBar(){
+  const bar=document.getElementById('camp-batch-bar');
+  const cnt=document.getElementById('camp-batch-count');
+  if(!bar)return;
+  if(selectedCampIds.size>0){bar.style.display='flex';cnt.textContent=`已選 ${selectedCampIds.size} 個`;}
+  else{bar.style.display='none';}
+}
+async function campBatchStatus(status){
+  if(!selectedCampIds.size){showToast('請先勾選團購','error');return;}
+  const statusLabel={active:'進行中',draft:'草稿/暫停',closed:'已結束'}[status]||status;
+  if(status==='closed'&&!confirm(`確定將 ${selectedCampIds.size} 個團購設為「已結束」？此操作後將移至歷史紀錄。`))return;
+  const ids=[...selectedCampIds];
+  loading(true,`更新 ${ids.length} 個團購狀態…`);
+  try{
+    let updated=0;
+    for(const id of ids){
+      const c=campaigns.find(x=>String(x.id)===String(id));if(!c)continue;
+      const data=await apiPost({action:'saveCampaign',campaign:{...c,status,products:c.products}});
+      if(data.status==='ok'){c.status=status;updated++;}
+    }
+    clearCampSelection();renderCampaigns();renderDashboard();
+    showToast(`已將 ${updated} 個團購設為「${statusLabel}」✓`);
+  }catch(e){showToast('更新失敗','error');}finally{loading(false);}
+}
+
+function campsTableHtml(list, showCheckbox=false){
   if(!list.length)return`<div class="empty"><div class="empty-icon">🛒</div><p>沒有符合的團購</p></div>`;
-  return`<table><thead><tr><th>名稱</th><th>廠商</th><th>截止</th><th>訂單</th><th>品項庫存</th><th>狀態</th><th>操作</th></tr></thead><tbody>`+
+  return`<table><thead><tr>
+    ${showCheckbox?`<th style="width:36px"><input type="checkbox" id="camp-select-all" onchange="toggleCampSelectAll(this)" style="cursor:pointer;width:16px;height:16px"></th>`:''}
+    <th>名稱</th><th>廠商</th><th>截止</th><th>訂單</th><th>品項庫存</th><th>狀態</th><th>操作</th>
+  </tr></thead><tbody>`+
   list.map(c=>{
     const cnt=orders.filter(o=>String(o.campaignId)===String(c.id)).length;
     const stockSummary=getCampStockSummary(c);
@@ -880,14 +942,16 @@ function campsTableHtml(list){
       const label=p.stock>=999
         ?`<span style="color:#5dca8a">已售 ${p.sold}</span>`
         :`<span style="color:${color}">${p.sold}/${p.stock}</span>${isSoldOut?' <span class="badge badge-unpaid" style="font-size:9px;padding:1px 5px">售完</span>':isLow?` <span style="font-size:10px;color:#c9a84c">剩${p.remaining}</span>`:''}`;
-      return`<div style="font-size:11px;margin-bottom:2px"><span style="color:var(--muted)">${p.name.slice(0,6)}${p.name.length>6?'…':''}</span> ${label}</div>`;
+      return`<div style="font-size:10px;margin-bottom:1px;white-space:nowrap"><span style="color:var(--muted)">${p.name.slice(0,5)}${p.name.length>5?'…':''}</span> ${label}</div>`;
     }).join(''):'<span style="color:var(--faint);font-size:11px">無品項</span>';
 
-    return`<tr><td style="font-weight:700">${c.name}</td>
+    return`<tr id="crow-${c.id}" style="${selectedCampIds.has(String(c.id))?'background:rgba(201,168,76,0.08)':''}">
+      ${showCheckbox?`<td><input type="checkbox" class="camp-check" data-id="${c.id}" ${selectedCampIds.has(String(c.id))?'checked':''} onchange="toggleCampSelect(this)" style="cursor:pointer;width:16px;height:16px"></td>`:''}
+      <td style="font-weight:700">${c.name}</td>
       <td><span class="badge badge-cat">${supName(c.supplierId)}</span></td>
       <td style="font-size:12px">${c.deadline}<br>${daysLeft(c.deadline,c.status)}</td>
       <td><span style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--gold)">${cnt}</span><span style="font-size:10px;color:var(--muted);display:block">筆訂單</span></td>
-      <td style="min-width:130px">${stockHtml}</td>
+      <td style="max-width:160px;font-size:11px">${stockHtml}</td>
       <td>${statusBadge(c.status)}</td>
       <td style="white-space:nowrap;display:flex;gap:6px">
         <button class="btn btn-outline btn-sm" onclick="editCampaign('${c.id}')">編輯</button>
@@ -900,13 +964,13 @@ function renderCampaigns(){
   const sid=document.getElementById('camp-filter-supplier')?.value||'';
   const st=document.getElementById('camp-filter-status')?.value||'';
   const list=campaigns.filter(c=>{
-    if(c.status==='closed')return false;
+    if(c.status==='closed'&&!st)return false; // hide closed unless explicitly filtered
     if(q&&!c.name.toLowerCase().includes(q))return false;
     if(sid&&String(c.supplierId)!==String(sid))return false;
     if(st&&c.status!==st)return false;
     return true;
   });
-  document.getElementById('campaigns-table').innerHTML=campsTableHtml(list);
+  document.getElementById('campaigns-table').innerHTML=campsTableHtml(list,true);
 }
 
 let editCampaignId=null,wizardStep=1,pickerSelectedIds=new Set(),pickerCurrentCat='__all__';
@@ -1018,7 +1082,7 @@ function openNewCampaign(){
 }
 function editCampaign(id){
   const c=campaigns.find(x=>String(x.id)===String(id));if(!c)return;
-  editCampaignId=id;document.getElementById('mc-title').textContent='編輯團購';
+  editCampaignId=String(id);document.getElementById('mc-title').textContent='編輯團購';
   document.getElementById('c-name').value=c.name;document.getElementById('c-deadline').value=c.deadline;
   document.getElementById('c-min').value=c.minPeople||'';document.getElementById('c-discount').value=c.discount||'';
   document.getElementById('c-status').value=c.status;document.getElementById('c-note').value=c.note||'';
@@ -1128,7 +1192,9 @@ async function saveCampaign(){
     return{id:'p'+Date.now()+Math.random(),name:inputs[0].value.trim(),price:parseFloat(inputs[1].value)||0,stock:parseInt(inputs[2].value)||999};
   }).filter(p=>p.name);
   const allowedCodes=getSelectedAllowedCodes();
-  const campaign={id:editCampaignId||'',name,supplierId,deadline,minPeople:document.getElementById('c-min').value||10,discount:document.getElementById('c-discount').value||100,status:document.getElementById('c-status').value,note:document.getElementById('c-note').value.trim(),products:prods,allowedCodes:JSON.stringify(allowedCodes)};
+  const campId=editCampaignId||'';
+  const campaign={id:campId,name,supplierId,deadline,minPeople:document.getElementById('c-min').value||10,discount:document.getElementById('c-discount').value||100,status:document.getElementById('c-status').value,note:document.getElementById('c-note').value.trim(),products:prods,allowedCodes:JSON.stringify(allowedCodes)};
+  console.log('Saving campaign id:', campId, 'editCampaignId:', editCampaignId);
   loading(true,'儲存中…');
   try{
     const data=await apiPost({action:'saveCampaign',campaign});
@@ -1386,11 +1452,64 @@ async function payBatchPaid(paid){
 let histTab='camps';
 function switchHistTab(tab,el){histTab=tab;document.querySelectorAll('.tab-pill').forEach(t=>t.classList.remove('active'));el.classList.add('active');['hist-camps','hist-orders','hist-stats'].forEach(id=>document.getElementById(id).style.display='none');document.getElementById('hist-'+tab).style.display='block';if(tab==='camps')renderHistCamps();if(tab==='orders')renderHistOrders();if(tab==='stats')renderHistStats();}
 function populateHistFilters(){populateSupFilter('hist-camp-supplier');populateSupFilter('hist-order-supplier');filterHistOrdersBySup();}
+function histCampsTableHtml(list){
+  if(!list.length)return`<div class="empty"><div class="empty-icon">📁</div><p>沒有符合的歷史團購</p></div>`;
+  return`<table><thead><tr><th>名稱</th><th>廠商</th><th>截止</th><th>訂單</th><th>狀態</th><th>操作</th></tr></thead><tbody>`+
+  list.map(c=>{
+    const cnt=orders.filter(o=>String(o.campaignId)===String(c.id)).length;
+    return`<tr>
+      <td style="font-weight:700">${c.name}</td>
+      <td><span class="badge badge-cat">${supName(c.supplierId)}</span></td>
+      <td style="font-size:12px">${c.deadline}</td>
+      <td><span style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--gold)">${cnt}</span></td>
+      <td>${statusBadge(c.status)}</td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-sm" onclick="editCampaign('${c.id}')">編輯</button>
+        <button class="btn btn-gold btn-sm" onclick="reopenCampaign('${c.id}')">🔄 再次開團</button>
+      </td>
+    </tr>`;
+  }).join('')+'</tbody></table>';
+}
+
+function reopenCampaign(id){
+  const c=campaigns.find(x=>String(x.id)===String(id));
+  if(!c){showToast('找不到此團購','error');return;}
+  // Reset editCampaignId to null = new campaign
+  editCampaignId=null;
+  document.getElementById('mc-title').textContent='再次開團（套用舊設定）';
+  // Pre-fill all settings from old campaign
+  populateCampaignSel('c-supplier-sel');
+  document.getElementById('c-supplier-sel').value=String(c.supplierId||'');
+  // Clear name and deadline to force user to fill new ones
+  document.getElementById('c-name').value=c.name+' (複製)';
+  document.getElementById('c-deadline').value=''; // Must fill new date
+  document.getElementById('c-min').value=c.minPeople||10;
+  document.getElementById('c-discount').value=c.discount||86;
+  document.getElementById('c-status').value='active';
+  document.getElementById('c-note').value=c.note||'';
+  // Pre-fill products
+  document.getElementById('prod-rows').innerHTML='';
+  (c.products||[]).forEach(p=>addProdRow(p.name,p.price,p.stock||999));
+  // Pre-fill allowed codes
+  let allowedCodes=[];
+  try{allowedCodes=JSON.parse(c.allowedCodes||'[]');}catch(e){}
+  populateAllowedCodes(allowedCodes);
+  loadNoteTemplates();
+  // Jump to step 3 (confirm) so user can review, but go back to step 1 first
+  pickerSelectedIds=new Set();
+  wizardStep=1;showWizardStep(1);
+  document.getElementById('camp-link-section').style.display='none';
+  document.getElementById('modal-campaign').classList.add('show');
+  showToast('已套用舊設定，請填寫新的截止日期後儲存');
+  // Show on history tab
+  showPage('campaigns');
+}
+
 function renderHistCamps(){
   const q=(document.getElementById('hist-camp-search')?.value||'').toLowerCase();
   const sid=document.getElementById('hist-camp-supplier')?.value||'';
   const list=campaigns.filter(c=>c.status==='closed').filter(c=>(!q||c.name.toLowerCase().includes(q))&&(!sid||String(c.supplierId)===String(sid)));
-  document.getElementById('hist-camps-table').innerHTML=list.length?campsTableHtml(list):`<div class="empty"><div class="empty-icon">📁</div><p>沒有已結束的團購</p></div>`;
+  document.getElementById('hist-camps-table').innerHTML=list.length?histCampsTableHtml(list):`<div class="empty"><div class="empty-icon">📁</div><p>沒有已結束的團購</p></div>`;
 }
 function filterHistOrdersBySup(){
   const sid=document.getElementById('hist-order-supplier')?.value||'';
