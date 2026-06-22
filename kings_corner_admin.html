@@ -203,6 +203,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="nav-item" onclick="showPage('products')"><span class="ni">📦</span>商品庫</div>
       <div class="nav-item" onclick="showPage('suppliers')"><span class="ni">🏭</span>廠商管理</div>
       <div class="nav-item" onclick="showPage('ads')"><span class="ni">🖼️</span>廣告管理</div>
+      <div class="nav-item" onclick="showPage('promo')"><span class="ni">🎟️</span>優惠碼管理</div>
       <div class="nav-item" onclick="showPage('marketing')"><span class="ni">📣</span>行銷設定</div>
       <div class="nav-item root-only" onclick="showPage('accounts')"><span class="ni">⚙️</span>帳號設定</div>
     </nav>
@@ -233,6 +234,13 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     </div>
     <div class="page" id="page-orders">
       <div class="topbar"><div class="page-title">訂單總覽</div><button class="btn btn-outline" onclick="exportXLSX()">⬇ 匯出 Excel</button></div>
+      <!-- Batch action bar -->
+      <div id="batch-bar" style="display:none;background:var(--dark3);border:1px solid var(--gold);border-radius:8px;padding:10px 16px;margin-bottom:12px;display:none;align-items:center;gap:10px;flex-wrap:wrap">
+        <span id="batch-count" style="font-size:13px;color:var(--gold);font-weight:700">已選 0 筆</span>
+        <button class="btn btn-gold btn-sm" onclick="batchPaid(true)">✓ 標記已付款</button>
+        <button class="btn btn-outline btn-sm" onclick="batchPaid(false)">✗ 標記未付款</button>
+        <button class="btn btn-outline btn-sm" onclick="clearSelection()" style="margin-left:auto">取消選取</button>
+      </div>
       <div class="toolbar">
         <div class="search-wrap"><input type="text" id="order-search" placeholder="搜尋姓名/電話" oninput="renderOrders()"></div>
         <select id="order-filter-supplier" onchange="filterOrdersBySup()"><option value="">所有廠商</option></select>
@@ -292,6 +300,33 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.8">每個廠商最多 3 張輪播廣告。儲存後同步到 Sheets，index 頁面即時生效。</div>
       <div id="ads-content"></div>
     </div>
+    <!-- PROMO CODES -->
+    <div class="page" id="page-promo">
+      <div class="topbar">
+        <div class="page-title">優惠碼管理</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" onclick="showPage('promo');showPromoStats()">📊 使用統計</button>
+          <button class="btn btn-gold" onclick="openNewPromo()">＋ 新增優惠碼</button>
+        </div>
+      </div>
+      <!-- Stats section -->
+      <div id="promo-stats-section" style="display:none;margin-bottom:20px">
+        <div style="background:var(--dark2);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:12px">📊 使用次數統計</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+            <input type="date" id="promo-from" style="background:var(--dark3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;color:var(--text);outline:none">
+            <span style="color:var(--muted)">至</span>
+            <input type="date" id="promo-to" style="background:var(--dark3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;color:var(--text);outline:none">
+            <select id="promo-filter-code" style="background:var(--dark3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:13px;color:var(--text);outline:none"><option value="">所有優惠碼</option></select>
+            <button class="btn btn-gold btn-sm" onclick="loadPromoStats()">查詢</button>
+          </div>
+          <div class="table-wrap overflow-x" id="promo-stats-table"></div>
+        </div>
+      </div>
+      <!-- Promo codes list -->
+      <div class="table-wrap overflow-x" id="promo-table"></div>
+    </div>
+
     <div class="page" id="page-marketing">
       <div class="topbar"><div class="page-title">行銷設定</div><button class="btn btn-gold" onclick="saveMarketingSettings()">💾 儲存設定</button></div>
       <div class="mkt-section"><div class="mkt-section-title">🎛️ 全域控制</div>
@@ -372,6 +407,11 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <div class="ff" style="margin-bottom:0"><label>狀態</label><select id="c-status"><option value="active">進行中</option><option value="draft">草稿</option><option value="closed">已關閉</option></select></div>
       </div>
       <div class="ff"><label>備註 / 付款說明</label><textarea id="c-note" placeholder="付款方式說明…"></textarea></div>
+      <div class="ff">
+        <label>開放優惠碼（白名單）</label>
+        <div style="font-size:11px;color:var(--faint);margin-bottom:8px">勾選哪些優惠碼可在此團購使用，不勾選則全部不可用</div>
+        <div id="c-allowed-codes" style="display:flex;flex-wrap:wrap;gap:8px;background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:44px"></div>
+      </div>
     </div>
     <div class="modal-body" id="step-2" style="display:none;padding-top:0">
       <div id="supplier-prod-hint" style="background:var(--dark3);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--muted)"></div>
@@ -400,8 +440,21 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div id="prod-rows"></div>
       <button class="add-prod-btn" onclick="addProdRow()">＋ 手動新增品項</button>
       <div id="camp-link-section" style="display:none;margin-top:16px">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">分享連結</div>
-        <div class="link-copy-box"><input type="text" id="camp-link-input" readonly><button onclick="doCopyLink()">複製連結</button></div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">分享連結（一般）</div>
+        <div class="link-copy-box"><input type="text" id="camp-link-input" readonly><button onclick="doCopyLink()">複製</button></div>
+        <div style="margin-top:12px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">🎟️ 團購主專屬連結</div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <select id="promo-link-code" style="flex:1;background:var(--dark3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none">
+              <option value="">選擇優惠碼</option>
+            </select>
+            <button onclick="generatePromoLink()" style="background:var(--gold);color:var(--dark);border:none;border-radius:6px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans TC',sans-serif">產生</button>
+          </div>
+          <div class="link-copy-box" id="promo-link-box" style="display:none">
+            <input type="text" id="promo-link-input" readonly>
+            <button onclick="doCopyPromoLink()">複製</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal-foot">
@@ -459,6 +512,43 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     </div>
   </div>
 </div>
+<!-- MODAL: Promo Code -->
+<div class="modal-bg" id="modal-promo">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-hd"><h3 id="mpc-title">新增優惠碼</h3><button class="modal-close" onclick="closeModal('modal-promo')">×</button></div>
+    <div class="modal-body">
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="ff" style="margin-bottom:0"><label>優惠碼 *</label><input type="text" id="pc-code" placeholder="例：ALICE86" style="text-transform:uppercase"></div>
+        <div class="ff" style="margin-bottom:0"><label>團購主名稱 *</label><input type="text" id="pc-name" placeholder="例：Alice Wang"></div>
+      </div>
+      <div class="ff"><label>聯絡方式</label><input type="text" id="pc-contact" placeholder="LINE ID / 電話"></div>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="ff" style="margin-bottom:0">
+          <label>折扣類型</label>
+          <select id="pc-discount-type">
+            <option value="fixed">固定折扣（覆蓋團購折扣）</option>
+            <option value="none">不改變折扣（純追蹤）</option>
+          </select>
+        </div>
+        <div class="ff" style="margin-bottom:0">
+          <label>折扣值（折）</label>
+          <input type="number" id="pc-discount-value" placeholder="例：83 = 83折" min="1" max="100">
+        </div>
+      </div>
+      <div class="ff"><label>備註</label><input type="text" id="pc-note" placeholder="獎金規則備註…"></div>
+      <div class="ff">
+        <label>狀態</label>
+        <select id="pc-status"><option value="true">啟用</option><option value="false">停用</option></select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-danger btn-sm" id="pc-delete-btn" style="display:none;margin-right:auto" onclick="deletePromo()">刪除</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-promo')">取消</button>
+      <button class="btn btn-gold" onclick="savePromo()">儲存</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Ad -->
 <div class="modal-bg" id="modal-ad">
   <div class="modal" style="max-width:540px"><div class="modal-hd"><h3 id="mad-title">新增廣告</h3><button class="modal-close" onclick="closeModal('modal-ad')">×</button></div>
@@ -541,7 +631,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 const GAS_URL_KEY='kc_gas_url';
 let GAS_URL=localStorage.getItem(GAS_URL_KEY)||'';
 let currentUser=null,token=localStorage.getItem('kc_token')||'';
-let campaigns=[],orders=[],suppliers=[],products=[],adsData={},marketingSettings={},accounts=[];
+let campaigns=[],orders=[],suppliers=[],products=[],adsData={},marketingSettings={},accounts=[],promoCodes=[];
 
 function saveGasUrl(){
   const url=document.getElementById('gas-url-input').value.trim();
@@ -653,7 +743,7 @@ async function loadData(){
   finally{loading(false);}
 }
 
-const PAGE_ORDER=['dashboard','campaigns','orders','payment','history','products','suppliers','ads','marketing','accounts'];
+const PAGE_ORDER=['dashboard','campaigns','orders','payment','history','products','suppliers','ads','promo','marketing','accounts'];
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -668,6 +758,7 @@ function showPage(id){
   if(id==='products')renderProducts();
   if(id==='suppliers')renderSuppliers();
   if(id==='ads')renderAdsPage();
+  if(id==='promo')renderPromoPage();
   if(id==='marketing')renderMarketingPage();
   if(id==='accounts')renderAccounts();
 }
@@ -781,6 +872,26 @@ function populateCampaignSel(elId){
   const el=document.getElementById(elId);if(!el)return;
   el.innerHTML='<option value="">選擇廠商</option>'+suppliers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 }
+function populateAllowedCodes(selected=[]){
+  const el=document.getElementById('c-allowed-codes');if(!el)return;
+  if(!promoCodes.length){el.innerHTML='<span style="font-size:12px;color:var(--faint)">尚無優惠碼，請先在優惠碼管理頁新增</span>';return;}
+  el.innerHTML=promoCodes.map(p=>{
+    const checked=selected.includes(p.code);
+    return`<label style="display:inline-flex;align-items:center;gap:6px;background:${checked?'rgba(201,168,76,0.15)':'var(--dark)'};border:1px solid ${checked?'var(--gold)':'var(--border)'};border-radius:6px;padding:6px 10px;cursor:pointer;font-size:12px;transition:all 0.15s">
+      <input type="checkbox" value="${p.code}" ${checked?'checked':''} style="cursor:pointer" onchange="onAllowedCodeChange(this)">
+      <span style="font-weight:700;color:${checked?'var(--gold)':'var(--text)'}">${p.code}</span>
+      <span style="color:var(--muted)">${p.name}</span>
+    </label>`;
+  }).join('');
+}
+function onAllowedCodeChange(cb){
+  const label=cb.closest('label');
+  if(label){label.style.background=cb.checked?'rgba(201,168,76,0.15)':'var(--dark)';label.style.borderColor=cb.checked?'var(--gold)':'var(--border)';label.querySelector('span').style.color=cb.checked?'var(--gold)':'var(--text)';}
+}
+function getSelectedAllowedCodes(){
+  return [...document.querySelectorAll('#c-allowed-codes input[type=checkbox]:checked')].map(c=>c.value);
+}
+
 function onSupplierChange(){
   const sid=document.getElementById('c-supplier-sel').value;
   const sup=suppliers.find(s=>String(s.id)===String(sid));
@@ -794,6 +905,7 @@ function openNewCampaign(){
   document.getElementById('c-deadline').value='';
   document.getElementById('c-min').value='10';document.getElementById('c-discount').value='86';document.getElementById('c-status').value='active';
   populateCampaignSel('c-supplier-sel');document.getElementById('prod-rows').innerHTML='';
+  populateAllowedCodes([]);
   document.getElementById('camp-link-section').style.display='none';
   pickerSelectedIds=new Set();wizardStep=1;showWizardStep(1);
   document.getElementById('modal-campaign').classList.add('show');
@@ -807,6 +919,8 @@ function editCampaign(id){
   populateCampaignSel('c-supplier-sel');document.getElementById('c-supplier-sel').value=String(c.supplierId||'');
   document.getElementById('prod-rows').innerHTML='';
   (c.products||[]).forEach(p=>addProdRow(p.name,p.price,p.stock));
+  let allowedCodes=[];try{allowedCodes=JSON.parse(c.allowedCodes||'[]');}catch(e){}
+  populateAllowedCodes(allowedCodes);
   document.getElementById('camp-link-input').value=buildCampLink(id);
   document.getElementById('camp-link-section').style.display='block';
   pickerSelectedIds=new Set();wizardStep=3;showWizardStep(3);
@@ -818,6 +932,16 @@ function showWizardStep(n){
   [1,2,3].forEach(i=>{document.getElementById('step-'+i).style.display=i===n?'block':'none';
     const dot=document.getElementById('dot-'+i);dot.className='step-dot-item'+(i===n?' active':i<n?' done':'');});
   document.getElementById('mc-back-btn').style.display=n>1?'inline-flex':'none';
+  if(n===3){
+    // Populate promo link selector with allowed codes
+    const sel=document.getElementById('promo-link-code');
+    if(sel){
+      const allowed=getSelectedAllowedCodes();
+      const filtered=allowed.length?promoCodes.filter(p=>allowed.includes(p.code)):promoCodes;
+      sel.innerHTML='<option value="">選擇優惠碼</option>'+filtered.map(p=>`<option value="${p.code}">${p.code} - ${p.name}</option>`).join('');
+      document.getElementById('promo-link-box').style.display='none';
+    }
+  }
   const nb=document.getElementById('mc-next-btn');
   if(n===3){nb.textContent='💾 儲存';nb.onclick=saveCampaign;}
   else{nb.textContent='下一步 →';nb.onclick=wizardNext;}
@@ -896,7 +1020,8 @@ async function saveCampaign(){
     const inputs=r.querySelectorAll('input');
     return{id:'p'+Date.now()+Math.random(),name:inputs[0].value.trim(),price:parseFloat(inputs[1].value)||0,stock:parseInt(inputs[2].value)||999};
   }).filter(p=>p.name);
-  const campaign={id:editCampaignId||'',name,supplierId,deadline,minPeople:document.getElementById('c-min').value||10,discount:document.getElementById('c-discount').value||100,status:document.getElementById('c-status').value,note:document.getElementById('c-note').value.trim(),products:prods};
+  const allowedCodes=getSelectedAllowedCodes();
+  const campaign={id:editCampaignId||'',name,supplierId,deadline,minPeople:document.getElementById('c-min').value||10,discount:document.getElementById('c-discount').value||100,status:document.getElementById('c-status').value,note:document.getElementById('c-note').value.trim(),products:prods,allowedCodes:JSON.stringify(allowedCodes)};
   loading(true,'儲存中…');
   try{
     const data=await apiPost({action:'saveCampaign',campaign:JSON.stringify(campaign)});
@@ -911,6 +1036,22 @@ function buildCampLink(id){
   const base=location.href.replace('kings_corner_admin.html','kings_corner_index.html').split('?')[0];
   return`${base}?cid=${id}`;
 }
+function generatePromoLink(){
+  const code=document.getElementById('promo-link-code').value;
+  if(!code){showToast('請選擇優惠碼','error');return;}
+  const baseLink=document.getElementById('camp-link-input').value;
+  if(!baseLink){showToast('請先儲存團購','error');return;}
+  const promoLink=baseLink+'&code='+encodeURIComponent(code);
+  document.getElementById('promo-link-input').value=promoLink;
+  document.getElementById('promo-link-box').style.display='flex';
+}
+function doCopyPromoLink(){
+  const input=document.getElementById('promo-link-input');
+  if(navigator.clipboard&&window.isSecureContext){
+    navigator.clipboard.writeText(input.value).then(()=>showToast('專屬連結已複製 ✓'));
+  }else{input.select();document.execCommand('copy');showToast('專屬連結已複製 ✓');}
+}
+
 function doCopyLink(){
   const input=document.getElementById('camp-link-input');
   if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(input.value).then(()=>showToast('連結已複製！貼到 LINE 群組即可分享 ✓')).catch(()=>fallbackCopy(input));}
@@ -918,10 +1059,73 @@ function doCopyLink(){
 }
 function fallbackCopy(input){input.select();input.setSelectionRange(0,99999);try{document.execCommand('copy');showToast('連結已複製 ✓');}catch(e){showToast('請手動選取並複製連結','error');}input.blur();}
 
+let selectedOrderIds=new Set();
+
 function ordersTableHtml(list,mini=false){
   if(!list.length)return`<div class="empty"><div class="empty-icon">📋</div><p>暫無訂單</p></div>`;
-  return`<table><thead><tr><th>姓名</th>${mini?'<th>團購</th>':''}<th>電話</th><th>金額</th><th>付款</th><th>時間</th><th></th></tr></thead><tbody>`+
-  list.map(o=>`<tr><td style="font-weight:700">${o.name}</td>${mini?`<td style="font-size:11px;color:var(--muted)">${campName(o.campaignId)}</td>`:''}<td style="font-family:monospace;font-size:12px">${o.phone}</td><td><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--gold)">$${o.discounted}</span></td><td>${o.paid?'<span class="badge badge-paid">已付</span>':'<span class="badge badge-unpaid">未付</span>'}</td><td style="font-size:11px;color:var(--muted)">${o.ts||''}</td><td><button class="btn btn-outline btn-sm" onclick="viewOrder('${o.id}')">詳情</button></td></tr>`).join('')+'</tbody></table>';
+  const showCheck=!mini;
+  return`<table><thead><tr>
+    ${showCheck?`<th style="width:36px"><input type="checkbox" id="select-all-orders" onchange="toggleSelectAll(this)" style="cursor:pointer;width:16px;height:16px"></th>`:''}
+    <th>姓名</th>${mini?'<th>團購</th>':''}<th>電話</th><th>優惠碼</th><th>金額</th><th>付款</th><th>時間</th><th></th>
+  </tr></thead><tbody>`+
+  list.map(o=>`<tr id="orow-${o.id}" style="${selectedOrderIds.has(o.id)?'background:rgba(201,168,76,0.08)':''}">
+    ${showCheck?`<td><input type="checkbox" class="order-check" data-id="${o.id}" ${selectedOrderIds.has(o.id)?'checked':''} onchange="toggleOrderSelect(this)" style="cursor:pointer;width:16px;height:16px"></td>`:''}
+    <td style="font-weight:700">${o.name}</td>
+    ${mini?`<td style="font-size:11px;color:var(--muted)">${campName(o.campaignId)}</td>`:''}
+    <td style="font-family:monospace;font-size:12px">${o.phone}</td>
+    <td><span style="font-size:11px;${o.promoCode&&o.promoCode!=='自然流量'?'color:var(--gold);font-weight:700':'color:var(--faint)'}">${o.promoCode||'自然流量'}</span></td>
+    <td><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--gold)">$${o.discounted}</span></td>
+    <td>${o.paid?'<span class="badge badge-paid">已付</span>':'<span class="badge badge-unpaid">未付</span>'}</td>
+    <td style="font-size:11px;color:var(--muted)">${o.ts||''}</td>
+    <td><button class="btn btn-outline btn-sm" onclick="viewOrder('${o.id}')">詳情</button></td>
+  </tr>`).join('')+'</tbody></table>';
+}
+
+function toggleOrderSelect(cb){
+  const id=cb.dataset.id;
+  if(cb.checked)selectedOrderIds.add(id);else selectedOrderIds.delete(id);
+  updateBatchBar();
+  const row=document.getElementById('orow-'+id);
+  if(row)row.style.background=cb.checked?'rgba(201,168,76,0.08)':'';
+}
+function toggleSelectAll(cb){
+  document.querySelectorAll('.order-check').forEach(c=>{
+    c.checked=cb.checked;
+    const id=c.dataset.id;
+    if(cb.checked)selectedOrderIds.add(id);else selectedOrderIds.delete(id);
+    const row=document.getElementById('orow-'+id);
+    if(row)row.style.background=cb.checked?'rgba(201,168,76,0.08)':'';
+  });
+  updateBatchBar();
+}
+function clearSelection(){
+  selectedOrderIds.clear();
+  document.querySelectorAll('.order-check').forEach(c=>{c.checked=false;});
+  const allCb=document.getElementById('select-all-orders');
+  if(allCb)allCb.checked=false;
+  document.querySelectorAll('[id^="orow-"]').forEach(r=>r.style.background='');
+  updateBatchBar();
+}
+function updateBatchBar(){
+  const bar=document.getElementById('batch-bar');
+  const cnt=document.getElementById('batch-count');
+  if(!bar)return;
+  if(selectedOrderIds.size>0){bar.style.display='flex';cnt.textContent=`已選 ${selectedOrderIds.size} 筆`;}
+  else{bar.style.display='none';}
+}
+async function batchPaid(paid){
+  if(!selectedOrderIds.size){showToast('請先勾選訂單','error');return;}
+  const ids=[...selectedOrderIds];
+  loading(true,`更新 ${ids.length} 筆付款狀態…`);
+  try{
+    const data=await api('GET',{action:'batchUpdatePaid',orderIds:JSON.stringify(ids),paid:String(paid)});
+    if(data.status!=='ok'){showToast(data.message||'更新失敗','error');return;}
+    // Update local data
+    orders.forEach(o=>{if(ids.includes(o.id))o.paid=paid;});
+    clearSelection();
+    renderOrders();renderPayment();renderDashboard();
+    showToast(`已更新 ${data.updated} 筆 ${paid?'→ 已付款':'→ 未付款'} ✓`);
+  }catch(e){showToast('更新失敗','error');}finally{loading(false);}
 }
 function populateOrderFilters(){populateSupFilter('order-filter-supplier');filterOrdersBySup();}
 function filterOrdersBySup(){
@@ -1107,6 +1311,124 @@ function renderSuppliers(){document.getElementById('suppliers-table').innerHTML=
 function openNewSupplier(){editSupplierId=null;document.getElementById('ms-title').textContent='新增廠商';['s-name','s-cat','s-contact','s-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('modal-supplier').classList.add('show');}
 function editSupplier(id){const s=suppliers.find(x=>String(x.id)===String(id));if(!s)return;editSupplierId=id;document.getElementById('ms-title').textContent='編輯廠商';document.getElementById('s-name').value=s.name;document.getElementById('s-cat').value=s.cat||'';document.getElementById('s-contact').value=s.contact||'';document.getElementById('s-note').value=s.note||'';document.getElementById('modal-supplier').classList.add('show');}
 async function saveSupplier(){const name=document.getElementById('s-name').value.trim();if(!name){showToast('請輸入廠商名稱','error');return;}const supplier={id:editSupplierId||'',name,cat:document.getElementById('s-cat').value.trim(),contact:document.getElementById('s-contact').value.trim(),note:document.getElementById('s-note').value.trim()};loading(true,'儲存中…');try{const data=await apiPost({action:'saveSupplier',supplier:JSON.stringify(supplier)});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-supplier');await loadData();showToast('廠商已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
+}
+
+// ── PROMO CODES ──
+let editPromoId=null;
+
+function renderPromoPage(){
+  // Populate filter
+  const filterEl=document.getElementById('promo-filter-code');
+  if(filterEl){
+    const cur=filterEl.value;
+    filterEl.innerHTML='<option value="">所有優惠碼</option>'+promoCodes.map(p=>`<option value="${p.code}">${p.code} - ${p.name}</option>`).join('');
+    filterEl.value=cur;
+  }
+  // Set default date range (this month)
+  const now=new Date();
+  const fromEl=document.getElementById('promo-from');
+  const toEl=document.getElementById('promo-to');
+  if(fromEl&&!fromEl.value) fromEl.value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
+  if(toEl&&!toEl.value) toEl.value=now.toISOString().slice(0,10);
+
+  if(!promoCodes.length){
+    document.getElementById('promo-table').innerHTML=`<div class="empty"><div class="empty-icon">🎟️</div><p>尚無優惠碼，點右上角新增</p></div>`;
+    return;
+  }
+  document.getElementById('promo-table').innerHTML=`<table><thead><tr>
+    <th>優惠碼</th><th>團購主</th><th>聯絡</th><th>折扣</th><th>狀態</th><th>備註</th><th>操作</th>
+  </tr></thead><tbody>`+
+  promoCodes.map(p=>`<tr>
+    <td><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--gold)">${p.code}</span></td>
+    <td style="font-weight:700">${p.name}</td>
+    <td style="font-size:12px;color:var(--muted)">${p.contact||'—'}</td>
+    <td>${p.discountType==='fixed'?`<span style="color:var(--red);font-weight:700">${p.discountValue}折</span>`:'純追蹤'}</td>
+    <td>${p.status==='true'?'<span class="badge badge-active">啟用</span>':'<span class="badge badge-closed">停用</span>'}</td>
+    <td style="font-size:11px;color:var(--muted)">${p.note||'—'}</td>
+    <td><button class="btn btn-outline btn-sm" onclick="openEditPromo('${p.id}')">編輯</button></td>
+  </tr>`).join('')+'</tbody></table>';
+}
+
+function showPromoStats(){
+  const sec=document.getElementById('promo-stats-section');
+  sec.style.display=sec.style.display==='none'?'block':'none';
+}
+
+async function loadPromoStats(){
+  const from=document.getElementById('promo-from')?.value||'';
+  const to=document.getElementById('promo-to')?.value||'';
+  const code=document.getElementById('promo-filter-code')?.value||'';
+  loading(true,'載入統計中…');
+  try{
+    const qs=new URLSearchParams({action:'getPromoStats',from,to,code,token}).toString();
+    const data=await api('GET',{action:'getPromoStats',from,to,code});
+    if(data.status!=='ok'){showToast(data.message,'error');return;}
+    const stats=data.stats||[];
+    if(!stats.length){document.getElementById('promo-stats-table').innerHTML=`<div class="empty"><p>此區間無資料</p></div>`;return;}
+    document.getElementById('promo-stats-table').innerHTML=`<table><thead><tr>
+      <th>優惠碼/來源</th><th>團購名稱</th><th>使用次數</th><th>累計金額</th>
+    </tr></thead><tbody>`+
+    stats.map(s=>`<tr>
+      <td><span style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:${s.promoCode==='自然流量'?'var(--muted)':'var(--gold)'}">${s.promoCode}</span></td>
+      <td style="font-size:12px">${s.campaignName}</td>
+      <td><span style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--gold)">${s.count}</span></td>
+      <td>$${s.totalDiscounted.toLocaleString()}</td>
+    </tr>`).join('')+'</tbody></table>';
+  }catch(e){showToast('載入失敗','error');}finally{loading(false);}
+}
+
+function openNewPromo(){
+  editPromoId=null;
+  document.getElementById('mpc-title').textContent='新增優惠碼';
+  ['pc-code','pc-name','pc-contact','pc-note','pc-discount-value'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pc-discount-type').value='fixed';
+  document.getElementById('pc-status').value='true';
+  document.getElementById('pc-delete-btn').style.display='none';
+  document.getElementById('modal-promo').classList.add('show');
+}
+function openEditPromo(id){
+  const p=promoCodes.find(x=>x.id===id);if(!p)return;
+  editPromoId=id;
+  document.getElementById('mpc-title').textContent='編輯優惠碼';
+  document.getElementById('pc-code').value=p.code;
+  document.getElementById('pc-name').value=p.name;
+  document.getElementById('pc-contact').value=p.contact||'';
+  document.getElementById('pc-discount-type').value=p.discountType||'fixed';
+  document.getElementById('pc-discount-value').value=p.discountValue||'';
+  document.getElementById('pc-note').value=p.note||'';
+  document.getElementById('pc-status').value=p.status;
+  document.getElementById('pc-delete-btn').style.display='inline-flex';
+  document.getElementById('modal-promo').classList.add('show');
+}
+async function savePromo(){
+  const code=document.getElementById('pc-code').value.trim().toUpperCase();
+  const name=document.getElementById('pc-name').value.trim();
+  if(!code){showToast('請輸入優惠碼','error');return;}
+  if(!name){showToast('請輸入團購主名稱','error');return;}
+  // Check duplicate code
+  if(!editPromoId && promoCodes.find(p=>p.code===code)){showToast('此優惠碼已存在','error');return;}
+  const promoCode={
+    id:editPromoId||'',code,name,
+    contact:document.getElementById('pc-contact').value.trim(),
+    discountType:document.getElementById('pc-discount-type').value,
+    discountValue:document.getElementById('pc-discount-value').value||'',
+    status:document.getElementById('pc-status').value,
+    note:document.getElementById('pc-note').value.trim(),
+  };
+  loading(true,'儲存中…');
+  try{
+    const data=await api('GET',{action:'savePromoCode',promoCode:JSON.stringify(promoCode)});
+    if(data.status!=='ok'){showToast(data.message,'error');return;}
+    closeModal('modal-promo');await loadData();showToast('優惠碼已儲存 ✓');
+  }catch(e){showToast('儲存失敗','error');}finally{loading(false);}
+}
+async function deletePromo(){
+  if(!confirm('確定刪除此優惠碼？'))return;
+  loading(true,'刪除中…');
+  try{
+    await api('GET',{action:'deletePromoCode',id:editPromoId});
+    closeModal('modal-promo');await loadData();showToast('已刪除');
+  }catch(e){showToast('刪除失敗','error');}finally{loading(false);}
 }
 
 let editAdSupplierId=null,editAdId=null;

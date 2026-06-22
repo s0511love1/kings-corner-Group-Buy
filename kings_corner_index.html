@@ -354,6 +354,15 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
       <div class="form-card-hd"><div class="step-dot">1</div>填寫資料</div>
       <div class="field"><label>姓名 <span class="req">*</span></label><input type="text" id="f-name" placeholder="請輸入姓名" autocomplete="name"></div>
       <div class="field"><label>手機 <span class="req">*</span></label><input type="tel" id="f-phone" placeholder="09XXXXXXXX" maxlength="10" autocomplete="tel"></div>
+      <div class="field">
+        <label>優惠碼 <span style="font-weight:400;color:#aaa;text-transform:none;letter-spacing:0;font-size:10px">（選填）</span></label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="f-promo" placeholder="輸入優惠碼" autocomplete="off" style="flex:1;text-transform:uppercase"
+            oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')applyPromoCode()">
+          <button onclick="applyPromoCode()" style="background:var(--dark);color:var(--gold);border:1px solid var(--gold-dark);border-radius:8px;padding:0 16px;font-size:13px;font-weight:700;font-family:'Noto Sans TC',sans-serif;cursor:pointer;white-space:nowrap;touch-action:manipulation">套用</button>
+        </div>
+        <div id="promo-result" style="margin-top:6px;font-size:12px;display:none"></div>
+      </div>
     </div>
 
     <!-- Step 2: 選商品 -->
@@ -637,6 +646,37 @@ function thumbHtml(p) {
 
 // ══ STATE ══
 let currentCampaign=null, currentSupplierId=null, qty={}, cdTimer=null;
+let appliedPromo=null;
+
+async function applyPromoCode(){
+  const code=document.getElementById('f-promo').value.trim().toUpperCase();
+  const resultEl=document.getElementById('promo-result');
+  if(!code){appliedPromo=null;resultEl.style.display='none';updateCart();return;}
+  if(!GAS_URL){resultEl.innerHTML='<span style="color:#ff8080">系統未連線</span>';resultEl.style.display='block';return;}
+  resultEl.innerHTML='<span style="color:#aaa">驗證中…</span>';resultEl.style.display='block';
+  try{
+    const res=await fetch(GAS_URL+'?action=validatePromoCode&code='+encodeURIComponent(code)+'&campaignId='+encodeURIComponent(currentCampaign?.id||''));
+    const data=await res.json();
+    if(data.status!=='ok'){
+      appliedPromo=null;
+      resultEl.innerHTML=`<span style="color:#ff8080">❌ ${data.message||'無效優惠碼'}</span>`;
+    }else{
+      appliedPromo=data;
+      const label=data.discountType==='fixed'?`套用 ${data.discountValue} 折`:'純追蹤（不改變折扣）';
+      resultEl.innerHTML=`<span style="color:#5dca8a">✅ ${data.name}・${label}</span>`;
+      document.getElementById('f-promo').value=data.code;
+    }
+    updateCart();
+  }catch(e){resultEl.innerHTML='<span style="color:#ff8080">驗證失敗</span>';}
+  resultEl.style.display='block';
+}
+
+function getEffectiveDiscount(){
+  if(appliedPromo&&appliedPromo.discountType==='fixed'&&appliedPromo.discountValue){
+    return parseFloat(appliedPromo.discountValue)/100;
+  }
+  return (currentCampaign?.discount||100)/100;
+}
 
 // ── QUERY ORDER ──
 function openQueryOrder(){
@@ -952,6 +992,17 @@ function goHome(){
   document.body.style.overflow='';
 }
 function buildOrderPage(){
+  // Auto-fill promo code from URL
+  const urlCode=new URLSearchParams(location.search).get('code');
+  if(urlCode){
+    document.getElementById('f-promo').value=urlCode.toUpperCase();
+    setTimeout(applyPromoCode,500); // Apply after page renders
+  } else {
+    appliedPromo=null;
+    document.getElementById('f-promo').value='';
+    const resultEl=document.getElementById('promo-result');
+    if(resultEl)resultEl.style.display='none';
+  }
   const c = currentCampaign;
   const sup = SUPPLIERS.find(s=>String(s.id)===String(c.supplierId))||{name:'—'};
   document.getElementById('order-top').innerHTML =
@@ -1025,7 +1076,7 @@ function updateCart(){
     const q=qty[p.id]||0;
     if(q>0){total+=q*p.price;chips.push(`${p.name.slice(0,5)}×${q}`);}
   });
-  const disc=Math.round(total*(currentCampaign.discount/100));
+  const disc=Math.round(total*getEffectiveDiscount());
   document.getElementById('cart-total').textContent=disc.toLocaleString();
   document.getElementById('cart-chips').innerHTML=
     chips.slice(0,4).map(ch=>`<span class="cart-chip-item">${ch}</span>`).join('')+
@@ -1137,12 +1188,15 @@ async function doFinalSubmit(){
   let submitOk=true, gasMsg='';
   if(GAS_URL){
     try{
+      const promoCode=appliedPromo?.code||'';
+      const promoDiscount=appliedPromo?.discountType==='fixed'?Math.round(total*(currentCampaign.discount/100))-disc:0;
       const qs=new URLSearchParams({
         action:'submitOrder',name,phone,
         campaignId:currentCampaign.id,
         campaignName:currentCampaign.name,
         items:JSON.stringify(items),
         total:String(total),discounted:String(disc),
+        promoCode,promoDiscount:String(promoDiscount),
         ts:new Date().toLocaleString('zh-TW')
       }).toString();
       const res=await fetch(GAS_URL+'?'+qs);
