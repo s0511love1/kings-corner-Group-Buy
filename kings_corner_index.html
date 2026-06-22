@@ -376,7 +376,9 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
     <div class="notice-box">⚠️ 重量誤差 ±5%，請確保收件地址可冷凍收貨。訂單送出後如需修改請私訊群組管理員。</div>
   </div>
 
-  <div class="cart-bar">
+  <!-- Savings display -->
+<div id="cart-savings" style="display:none;position:fixed;bottom:80px;left:0;right:0;background:var(--dark2);border-top:1px solid var(--border);padding:8px 16px;font-size:12px;color:var(--text-dark);text-align:center;z-index:199;line-height:1.6"></div>
+<div class="cart-bar">
     <div class="cart-row">
       <span style="font-size:12px;color:#aaa;flex-shrink:0">已選</span>
       <div class="cart-chips-wrap" id="cart-chips"></div>
@@ -392,6 +394,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
   <div class="confirm-modal">
     <div class="cm-title">確認訂單內容</div>
     <div class="cm-subtitle">送出前請確認數量與庫存</div>
+    <div id="cm-savings-strip" style="display:none;background:#f0faf3;border:1px solid #b8e6c8;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#2e7d32;text-align:center"></div>
     <div id="cm-items-list"></div>
     <div class="cm-total">
       <div class="cm-total-label">優惠後總金額</div>
@@ -662,20 +665,54 @@ async function applyPromoCode(){
       resultEl.innerHTML=`<span style="color:#ff8080">❌ ${data.message||'無效優惠碼'}</span>`;
     }else{
       appliedPromo=data;
-      const label=data.discountType==='fixed'?`套用 ${data.discountValue} 折`:'純追蹤（不改變折扣）';
+      let cfg={};try{cfg=JSON.parse(data.discountValue||'{}');}catch(e){cfg={value:data.discountValue};}
+      let label='純追蹤（不改變價格）';
+      if(data.discountType==='percent')label=`${cfg.value||'?'}折優惠`;
+      else if(data.discountType==='amount_per_unit')label=`每份折 $${cfg.perUnit||'?'}`;
+      else if(data.discountType==='amount_threshold')label=`滿$${cfg.threshold||'?'}折$${cfg.off||'?'}`;
       resultEl.innerHTML=`<span style="color:#5dca8a">✅ ${data.name}・${label}</span>`;
       document.getElementById('f-promo').value=data.code;
     }
     updateCart();
-  }catch(e){resultEl.innerHTML='<span style="color:#ff8080">驗證失敗</span>';}
+  }catch(e){resultEl.innerHTML='<span style="color:#ff8080">驗證失敗，請稍後再試</span>';}
   resultEl.style.display='block';
 }
 
 function getEffectiveDiscount(){
-  if(appliedPromo&&appliedPromo.discountType==='fixed'&&appliedPromo.discountValue){
-    return parseFloat(appliedPromo.discountValue)/100;
+  // Returns multiplier for percent, used only for percent type
+  if(appliedPromo&&appliedPromo.discountType==='percent'){
+    let cfg={};try{cfg=JSON.parse(appliedPromo.discountValue||'{}');}catch(e){cfg={value:appliedPromo.discountValue};}
+    const val=parseFloat(cfg.value||cfg.discountValue||100);
+    return val/100;
   }
   return (currentCampaign?.discount||100)/100;
+}
+
+function calcDiscountedTotal(subtotal, totalQty){
+  // subtotal = sum of (price * qty) before any discount
+  if(!appliedPromo||appliedPromo.discountType==='none'){
+    return Math.round(subtotal*(currentCampaign?.discount||100)/100);
+  }
+  let cfg={};
+  try{cfg=JSON.parse(appliedPromo.discountValue||'{}');}catch(e){cfg={value:appliedPromo.discountValue};}
+
+  if(appliedPromo.discountType==='percent'){
+    const pct=parseFloat(cfg.value||100)/100;
+    return Math.round(subtotal*pct);
+  }
+  if(appliedPromo.discountType==='amount_per_unit'){
+    const perUnit=parseFloat(cfg.perUnit||0);
+    // Apply campaign base discount first, then subtract per-unit amount
+    const base=Math.round(subtotal*(currentCampaign?.discount||100)/100);
+    return Math.max(0, base - Math.round(perUnit*totalQty));
+  }
+  if(appliedPromo.discountType==='amount_threshold'){
+    const threshold=parseFloat(cfg.threshold||0);
+    const off=parseFloat(cfg.off||0);
+    const base=Math.round(subtotal*(currentCampaign?.discount||100)/100);
+    return base>=threshold?Math.max(0,base-off):base;
+  }
+  return Math.round(subtotal*(currentCampaign?.discount||100)/100);
 }
 
 // ── QUERY ORDER ──
@@ -964,7 +1001,7 @@ function campCardHtml(c, allActive){
     <div class="camp-body">
       <div class="camp-meta-row">
         <div class="cm-item"><div class="cm-lbl">截止日</div><div class="cm-val">${c.deadline}</div>${daysHtml}</div>
-        <div class="cm-item"><div class="cm-lbl">折扣</div><div class="cm-val" style="color:var(--red)">${c.discount}折</div></div>
+        <div class="cm-item"><div class="cm-lbl">優惠</div><div class="cm-val" style="font-size:12px">🏷️ 團購限定價</div></div>
         <div class="cm-item"><div class="cm-lbl">品項</div><div class="cm-val">${c.products.length} 種</div></div>
       </div>
       <div class="camp-preview">${preview}</div>
@@ -1010,7 +1047,7 @@ function buildOrderPage(){
      <div class="order-chips">
        <span class="order-chip">🏭 ${sup.name}</span>
        <span class="order-chip">📅 截止 ${c.deadline}</span>
-       <span class="order-chip" style="color:#5dca8a">🎁 ${c.discount}折</span>
+       <span class="order-chip" style="color:#5dca8a">🏷️ 團購限定價</span>
      </div>`;
   document.getElementById('pay-box-area').innerHTML = `<strong>💳 付款方式</strong>${c.note||'請向管理員確認付款方式'}`;
 
@@ -1071,12 +1108,27 @@ function chg(id,d){
   updateCart();
 }
 function updateCart(){
-  let total=0; const chips=[];
+  let total=0, totalQty=0; const chips=[];
   currentCampaign.products.forEach(p=>{
     const q=qty[p.id]||0;
-    if(q>0){total+=q*p.price;chips.push(`${p.name.slice(0,5)}×${q}`);}
+    if(q>0){total+=q*p.price;totalQty+=q;chips.push(`${p.name.slice(0,5)}×${q}`);}
   });
-  const disc=Math.round(total*getEffectiveDiscount());
+  const disc=calcDiscountedTotal(total,totalQty);
+  // Show savings breakdown
+  const baseDisc=Math.round(total*(currentCampaign?.discount||100)/100);
+  const promoSaving=baseDisc-disc;
+  const savingsEl=document.getElementById('cart-savings');
+  if(savingsEl){
+    if(appliedPromo&&appliedPromo.discountType!=='none'&&promoSaving>0){
+      savingsEl.innerHTML=`原價 <s style="color:#aaa">$${total.toLocaleString()}</s> → 團購價 <strong style="color:var(--gold)">$${baseDisc.toLocaleString()}</strong> → 優惠碼再省 <strong style="color:#5dca8a">$${promoSaving.toLocaleString()}</strong>`;
+      savingsEl.style.display='block';
+    } else if(total>0){
+      savingsEl.innerHTML=`原價 <s style="color:#aaa">$${total.toLocaleString()}</s> → 團購限定價 <strong style="color:var(--gold)">$${baseDisc.toLocaleString()}</strong>（省 $${(total-baseDisc).toLocaleString()}）`;
+      savingsEl.style.display=total>baseDisc?'block':'none';
+    } else {
+      savingsEl.style.display='none';
+    }
+  }
   document.getElementById('cart-total').textContent=disc.toLocaleString();
   document.getElementById('cart-chips').innerHTML=
     chips.slice(0,4).map(ch=>`<span class="cart-chip-item">${ch}</span>`).join('')+
@@ -1157,7 +1209,29 @@ function showConfirmModal(){
     </div>`;
   });
   document.getElementById('cm-items-list').innerHTML=html;
+  // Savings strip in confirm modal
+  const stripEl=document.getElementById('cm-savings-strip');
+  if(stripEl){
+    const base=Math.round(confirmTotal*(currentCampaign?.discount||100)/100);
+    const promoSave=base-confirmDisc;
+    if(confirmTotal>confirmDisc){
+      let msg=`原價 $${confirmTotal.toLocaleString()} → 團購限定價 $${base.toLocaleString()}`;
+      if(appliedPromo&&appliedPromo.discountType!=='none'&&promoSave>0){
+        msg+=` → 優惠碼再省 $${promoSave.toLocaleString()} = 合計 $${confirmDisc.toLocaleString()}`;
+      }
+      stripEl.textContent=msg;stripEl.style.display='block';
+    } else {stripEl.style.display='none';}
+  }
   document.getElementById('cm-total-amount').textContent='$'+disc.toLocaleString();
+  // Show discount type label
+  const baseAmt=Math.round(confirmTotal*(currentCampaign?.discount||100)/100);
+  const saved=baseAmt-disc;
+  const discLabelEl=document.getElementById('cm-discount-label');
+  if(discLabelEl){
+    if(appliedPromo&&appliedPromo.discountType!=='none'&&saved>0){
+      discLabelEl.textContent=`優惠碼省 $${saved}`;discLabelEl.style.display='block';
+    } else {discLabelEl.style.display='none';}
+  }
   const errEl=document.getElementById('cm-error-msg');
   const btnEl=document.getElementById('cm-submit-btn');
   if(hasError){
@@ -1189,7 +1263,9 @@ async function doFinalSubmit(){
   if(GAS_URL){
     try{
       const promoCode=appliedPromo?.code||'';
-      const promoDiscount=appliedPromo?.discountType==='fixed'?Math.round(total*(currentCampaign.discount/100))-disc:0;
+      const totalQty=items.reduce((s,i)=>s+(parseInt(i.qty)||0),0);
+      const baseDisc=Math.round(total*(currentCampaign.discount/100));
+      const promoDiscount=appliedPromo?baseDisc-disc:0;
       const qs=new URLSearchParams({
         action:'submitOrder',name,phone,
         campaignId:currentCampaign.id,

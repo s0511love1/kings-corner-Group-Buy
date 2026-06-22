@@ -251,7 +251,10 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="table-wrap overflow-x" id="orders-table"></div>
     </div>
     <div class="page" id="page-payment">
-      <div class="topbar"><div class="page-title">付款追蹤</div></div>
+      <div class="topbar">
+        <div class="page-title">付款追蹤</div>
+        <button class="btn btn-gold" onclick="exportPaidXLSX()">⬇ 匯出已付款 Excel</button>
+      </div>
       <div class="toolbar">
         <div class="search-wrap"><input type="text" id="pay-search" placeholder="搜尋姓名/電話" oninput="renderPayment()"></div>
         <select id="pay-filter-supplier" onchange="filterPayBySup()"><option value="">所有廠商</option></select>
@@ -420,7 +423,18 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <div class="ff" style="margin-bottom:0"><label>折扣 (%)</label><input type="number" id="c-discount" placeholder="86" min="1" max="100"></div>
         <div class="ff" style="margin-bottom:0"><label>狀態</label><select id="c-status"><option value="active">進行中</option><option value="draft">草稿</option><option value="closed">已關閉</option></select></div>
       </div>
-      <div class="ff"><label>備註 / 付款說明</label><textarea id="c-note" placeholder="付款方式說明…"></textarea></div>
+      <div class="ff">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label style="margin-bottom:0">備註 / 付款說明</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select id="note-template-select" onchange="applyNoteTemplate()" style="background:var(--dark3);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;color:var(--muted);font-family:'Noto Sans TC',sans-serif;outline:none;max-width:140px">
+              <option value="">套用範本…</option>
+            </select>
+            <button id="save-note-template-btn" class="btn btn-outline btn-sm" onclick="saveNoteTemplate()" style="font-size:11px;padding:4px 10px">儲存為範本</button>
+          </div>
+        </div>
+        <textarea id="c-note" placeholder="付款方式說明…"></textarea>
+      </div>
       <div class="ff">
         <label>開放優惠碼（白名單）</label>
         <div style="font-size:11px;color:var(--faint);margin-bottom:8px">勾選哪些優惠碼可在此團購使用，不勾選則全部不可用</div>
@@ -536,17 +550,41 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <div class="ff" style="margin-bottom:0"><label>團購主名稱 *</label><input type="text" id="pc-name" placeholder="例：Alice Wang"></div>
       </div>
       <div class="ff"><label>聯絡方式</label><input type="text" id="pc-contact" placeholder="LINE ID / 電話"></div>
-      <div class="form-row" style="margin-bottom:14px">
-        <div class="ff" style="margin-bottom:0">
-          <label>折扣類型</label>
-          <select id="pc-discount-type">
-            <option value="fixed">固定折扣（覆蓋團購折扣）</option>
-            <option value="none">不改變折扣（純追蹤）</option>
-          </select>
-        </div>
-        <div class="ff" style="margin-bottom:0">
-          <label>折扣值（折）</label>
+      <div class="ff" style="margin-bottom:14px">
+        <label>折扣類型</label>
+        <select id="pc-discount-type" onchange="updatePromoDiscountUI()">
+          <option value="percent">百分比折扣（覆蓋團購折扣）</option>
+          <option value="amount_per_unit">每份折固定金額</option>
+          <option value="amount_threshold">滿額折扣</option>
+          <option value="none">純追蹤（不改變價格）</option>
+        </select>
+      </div>
+      <div id="pc-discount-config" style="background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+        <!-- percent -->
+        <div id="cfg-percent">
+          <div class="ff" style="margin-bottom:0"><label>折扣值（折）</label>
           <input type="number" id="pc-discount-value" placeholder="例：83 = 83折" min="1" max="100">
+          <div style="font-size:11px;color:var(--faint);margin-top:4px">輸入 83 = 打83折，覆蓋團購預設折扣</div></div>
+        </div>
+        <!-- amount_per_unit -->
+        <div id="cfg-amount-per-unit" style="display:none">
+          <div class="ff" style="margin-bottom:0"><label>每份折扣金額（元）</label>
+          <input type="number" id="pc-per-unit" placeholder="例：5 = 每份 -$5" min="1">
+          <div style="font-size:11px;color:var(--faint);margin-top:4px">客人購買 N 份，共折 N × 金額</div></div>
+        </div>
+        <!-- amount_threshold -->
+        <div id="cfg-threshold" style="display:none">
+          <div class="form-row">
+            <div class="ff" style="margin-bottom:0"><label>滿額門檻（元）</label>
+            <input type="number" id="pc-threshold" placeholder="例：1000" min="1"></div>
+            <div class="ff" style="margin-bottom:0"><label>折扣金額（元）</label>
+            <input type="number" id="pc-threshold-off" placeholder="例：100" min="1"></div>
+          </div>
+          <div style="font-size:11px;color:var(--faint);margin-top:4px">訂單金額達門檻後折扣，不達門檻按原價</div>
+        </div>
+        <!-- none -->
+        <div id="cfg-none" style="display:none">
+          <div style="font-size:13px;color:var(--muted)">純追蹤模式：客人使用此碼不影響價格，只記錄使用次數。</div>
         </div>
       </div>
       <div class="ff"><label>備註</label><input type="text" id="pc-note" placeholder="獎金規則備註…"></div>
@@ -886,6 +924,69 @@ function populateCampaignSel(elId){
   const el=document.getElementById(elId);if(!el)return;
   el.innerHTML='<option value="">選擇廠商</option>'+suppliers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 }
+// ── NOTE TEMPLATES ──
+let noteTemplates=[]; // [{name, content}]
+
+async function loadNoteTemplates(){
+  try{
+    const data=await api('GET',{action:'getAll'});
+    if(data.status!=='ok')return;
+    const mkt=data.marketing||{};
+    noteTemplates=[];
+    for(let i=1;i<=5;i++){
+      const key='note_template_'+i;
+      if(mkt[key]){
+        try{noteTemplates.push({key,idx:i,...JSON.parse(mkt[key])});}catch(e){}
+      }
+    }
+    refreshNoteTemplateUI();
+  }catch(e){console.warn('loadNoteTemplates error',e);}
+}
+
+function refreshNoteTemplateUI(){
+  const sel=document.getElementById('note-template-select');
+  const btn=document.getElementById('save-note-template-btn');
+  if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">套用範本…</option>'+
+    noteTemplates.map(t=>`<option value="${t.key}">${t.name}</option>`).join('');
+  if(cur)sel.value=cur;
+  // Gray out save button if at limit
+  const atLimit=noteTemplates.length>=5;
+  if(btn){btn.disabled=atLimit;btn.style.opacity=atLimit?'0.4':'1';btn.title=atLimit?'已達 5 個範本上限，請至 Google Sheets 行銷設定工作表刪除後再新增':'';}
+}
+
+function applyNoteTemplate(){
+  const sel=document.getElementById('note-template-select');
+  const key=sel.value;
+  if(!key)return;
+  const t=noteTemplates.find(x=>x.key===key);
+  if(t){document.getElementById('c-note').value=t.content;sel.value='';}
+}
+
+async function saveNoteTemplate(){
+  if(noteTemplates.length>=5){showToast('已達 5 個範本上限，請至 Sheets 行銷設定工作表刪除後再新增','error');return;}
+  const content=document.getElementById('c-note').value.trim();
+  if(!content){showToast('請先填寫備註內容','error');return;}
+  const name=prompt('請輸入範本名稱（例如：初雞付款說明）');
+  if(!name||!name.trim())return;
+  // Find next available slot
+  const usedIdxs=noteTemplates.map(t=>t.idx);
+  let nextIdx=1;
+  while(usedIdxs.includes(nextIdx)&&nextIdx<=5)nextIdx++;
+  if(nextIdx>5){showToast('已達上限','error');return;}
+  const key='note_template_'+nextIdx;
+  const val=JSON.stringify({name:name.trim(),content});
+  loading(true,'儲存範本…');
+  try{
+    const data=await api('GET',{action:'saveMarketing',settings:JSON.stringify({[key]:val})});
+    if(data.status!=='ok'){showToast(data.message||'儲存失敗','error');return;}
+    noteTemplates.push({key,idx:nextIdx,name:name.trim(),content});
+    refreshNoteTemplateUI();
+    showToast(`範本「${name.trim()}」已儲存 ✓`);
+  }catch(e){showToast('儲存失敗','error');}finally{loading(false);}
+}
+
 function populateAllowedCodes(selected=[]){
   const el=document.getElementById('c-allowed-codes');if(!el)return;
   if(!promoCodes.length){el.innerHTML='<span style="font-size:12px;color:var(--faint)">尚無優惠碼，請先在優惠碼管理頁新增</span>';return;}
@@ -920,6 +1021,7 @@ function openNewCampaign(){
   document.getElementById('c-min').value='10';document.getElementById('c-discount').value='86';document.getElementById('c-status').value='active';
   populateCampaignSel('c-supplier-sel');document.getElementById('prod-rows').innerHTML='';
   populateAllowedCodes([]);
+  loadNoteTemplates();
   document.getElementById('camp-link-section').style.display='none';
   pickerSelectedIds=new Set();wizardStep=1;showWizardStep(1);
   document.getElementById('modal-campaign').classList.add('show');
@@ -935,6 +1037,7 @@ function editCampaign(id){
   (c.products||[]).forEach(p=>addProdRow(p.name,p.price,p.stock));
   let allowedCodes=[];try{allowedCodes=JSON.parse(c.allowedCodes||'[]');}catch(e){}
   populateAllowedCodes(allowedCodes);
+  loadNoteTemplates();
   document.getElementById('camp-link-input').value=buildCampLink(id);
   document.getElementById('camp-link-section').style.display='block';
   pickerSelectedIds=new Set();wizardStep=3;showWizardStep(3);
@@ -1404,7 +1507,13 @@ async function prodBatchActive(active){
       const data=await api('GET',{action:'saveProduct',product:JSON.stringify({...p,active:activeStr})});
       if(data.status==='ok'){p.active=activeStr;updated++;}
     }
-    clearProdSelection();renderProducts();
+    clearProdSelection();
+    // Switch to 'all' filter so deactivated products are still visible
+    if(!active){
+      const filterEl=document.getElementById('prod-filter-active');
+      if(filterEl)filterEl.value='all';
+    }
+    renderProducts();
     showToast(`已${active?'啟用':'停用'} ${updated} 項商品 ✓`);
   }catch(e){showToast('更新失敗','error');}finally{loading(false);}
 }
@@ -1487,7 +1596,13 @@ function renderPromoPage(){
     <td><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--gold)">${p.code}</span></td>
     <td style="font-weight:700">${p.name}</td>
     <td style="font-size:12px;color:var(--muted)">${p.contact||'—'}</td>
-    <td>${p.discountType==='fixed'?`<span style="color:var(--red);font-weight:700">${p.discountValue}折</span>`:'純追蹤'}</td>
+    <td>${(()=>{
+      let cfg={};try{cfg=JSON.parse(p.discountValue||'{}');}catch(e){cfg={value:p.discountValue};}
+      if(p.discountType==='percent')return`<span style="color:var(--red);font-weight:700">${cfg.value||'?'}折</span>`;
+      if(p.discountType==='amount_per_unit')return`<span style="color:#5dca8a;font-weight:700">每份-$${cfg.perUnit||'?'}</span>`;
+      if(p.discountType==='amount_threshold')return`<span style="color:#6eb4ff;font-weight:700">滿$${cfg.threshold||'?'}折$${cfg.off||'?'}</span>`;
+      return'<span style="color:var(--faint)">純追蹤</span>';
+    })()}</td>
     <td>${p.status==='true'?'<span class="badge badge-active">啟用</span>':'<span class="badge badge-closed">停用</span>'}</td>
     <td style="font-size:11px;color:var(--muted)">${p.note||'—'}</td>
     <td><button class="btn btn-outline btn-sm" onclick="openEditPromo('${p.id}')">編輯</button></td>
@@ -1522,13 +1637,21 @@ async function loadPromoStats(){
   }catch(e){showToast('載入失敗','error');}finally{loading(false);}
 }
 
+function updatePromoDiscountUI(){
+  const type=document.getElementById('pc-discount-type').value;
+  document.getElementById('cfg-percent').style.display=type==='percent'?'block':'none';
+  document.getElementById('cfg-amount-per-unit').style.display=type==='amount_per_unit'?'block':'none';
+  document.getElementById('cfg-threshold').style.display=type==='amount_threshold'?'block':'none';
+  document.getElementById('cfg-none').style.display=type==='none'?'block':'none';
+}
 function openNewPromo(){
   editPromoId=null;
   document.getElementById('mpc-title').textContent='新增優惠碼';
-  ['pc-code','pc-name','pc-contact','pc-note','pc-discount-value'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('pc-discount-type').value='fixed';
+  ['pc-code','pc-name','pc-contact','pc-note','pc-discount-value','pc-per-unit','pc-threshold','pc-threshold-off'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('pc-discount-type').value='percent';
   document.getElementById('pc-status').value='true';
   document.getElementById('pc-delete-btn').style.display='none';
+  updatePromoDiscountUI();
   document.getElementById('modal-promo').classList.add('show');
 }
 function openEditPromo(id){
@@ -1538,8 +1661,18 @@ function openEditPromo(id){
   document.getElementById('pc-code').value=p.code;
   document.getElementById('pc-name').value=p.name;
   document.getElementById('pc-contact').value=p.contact||'';
-  document.getElementById('pc-discount-type').value=p.discountType||'fixed';
-  document.getElementById('pc-discount-value').value=p.discountValue||'';
+  const dtype=p.discountType||'percent';
+  document.getElementById('pc-discount-type').value=dtype;
+  updatePromoDiscountUI();
+  let dconfig={};
+  try{dconfig=JSON.parse(p.discountValue||'{}');}catch(e){
+    // Legacy: plain number was stored as discountValue
+    if(p.discountValue)dconfig={value:p.discountValue};
+  }
+  if(document.getElementById('pc-discount-value'))document.getElementById('pc-discount-value').value=dconfig.value||'';
+  if(document.getElementById('pc-per-unit'))document.getElementById('pc-per-unit').value=dconfig.perUnit||'';
+  if(document.getElementById('pc-threshold'))document.getElementById('pc-threshold').value=dconfig.threshold||'';
+  if(document.getElementById('pc-threshold-off'))document.getElementById('pc-threshold-off').value=dconfig.off||'';
   document.getElementById('pc-note').value=p.note||'';
   document.getElementById('pc-status').value=p.status;
   document.getElementById('pc-delete-btn').style.display='inline-flex';
@@ -1552,11 +1685,20 @@ async function savePromo(){
   if(!name){showToast('請輸入團購主名稱','error');return;}
   // Check duplicate code
   if(!editPromoId && promoCodes.find(p=>p.code===code)){showToast('此優惠碼已存在','error');return;}
+  const discountType=document.getElementById('pc-discount-type').value;
+  let discountConfig={};
+  if(discountType==='percent'){
+    discountConfig={value:document.getElementById('pc-discount-value').value||''};
+  } else if(discountType==='amount_per_unit'){
+    discountConfig={perUnit:document.getElementById('pc-per-unit').value||''};
+  } else if(discountType==='amount_threshold'){
+    discountConfig={threshold:document.getElementById('pc-threshold').value||'',off:document.getElementById('pc-threshold-off').value||''};
+  }
   const promoCode={
     id:editPromoId||'',code,name,
     contact:document.getElementById('pc-contact').value.trim(),
-    discountType:document.getElementById('pc-discount-type').value,
-    discountValue:document.getElementById('pc-discount-value').value||'',
+    discountType,
+    discountValue:JSON.stringify(discountConfig),
     status:document.getElementById('pc-status').value,
     note:document.getElementById('pc-note').value.trim(),
   };
@@ -1605,6 +1747,71 @@ function openEditAccount(id){const a=accounts.find(x=>String(x.id)===String(id))
 async function saveAccount(){const name=document.getElementById('a-name').value.trim();const user=document.getElementById('a-user').value.trim();const pass=document.getElementById('a-pass').value;const pass2=document.getElementById('a-pass2').value;if(!name){showToast('請輸入姓名','error');return;}if(!editAccountId&&!user){showToast('請輸入帳號','error');return;}if(pass&&pass!==pass2){showToast('兩次密碼不一致','error');return;}if(pass&&pass.length<4){showToast('密碼至少 4 個字元','error');return;}const account={id:editAccountId||'',user,name,pass:pass||'',role:document.getElementById('a-role').value,active:document.getElementById('a-active').value};loading(true,'儲存中…');try{const data=await apiPost({action:'saveAccount',account:JSON.stringify(account)});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-account');await loadData();showToast('帳號已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
 }
 async function deleteAccount(){if(!confirm('確定要刪除此帳號？'))return;loading(true,'刪除中…');try{await apiPost({action:'deleteRecord',type:'account',id:editAccountId});closeModal('modal-account');await loadData();showToast('帳號已刪除');}catch(e){showToast('刪除失敗','error');}finally{loading(false);}
+}
+
+function exportPaidXLSX(){
+  if(window.XLSX){doExportPaidXLSX();}
+  else{showToast('載入 Excel 引擎…');const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=doExportPaidXLSX;document.head.appendChild(s);}
+}
+function doExportPaidXLSX(){
+  // Get current filter state from payment page
+  const sid=document.getElementById('pay-filter-supplier')?.value||'';
+  const cid=document.getElementById('pay-filter-campaign')?.value||'';
+  const q=(document.getElementById('pay-search')?.value||'').toLowerCase();
+  const campIds=sid?campaigns.filter(c=>String(c.supplierId)===String(sid)).map(c=>String(c.id)):null;
+
+  // Only paid orders matching current filters
+  const paidOrders=orders.filter(o=>{
+    if(!o.paid)return false;
+    if(campIds&&!campIds.includes(String(o.campaignId)))return false;
+    if(cid&&String(o.campaignId)!==String(cid))return false;
+    if(q&&!o.name?.toLowerCase().includes(q)&&!o.phone?.includes(q))return false;
+    return true;
+  });
+
+  if(!paidOrders.length){showToast('目前篩選條件下沒有已付款訂單','error');return;}
+
+  // Build camp name for filename
+  const campLabel=cid?campName(cid):(sid?supName(sid):'全部');
+  const today=new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const filename=`${campLabel}_已付款_${today}.xlsx`;
+
+  const wb=XLSX.utils.book_new();
+  const headers=['姓名','手機','品項','數量','金額（優惠後）'];
+  const rows=[];
+
+  paidOrders.forEach(o=>{
+    const items=Array.isArray(o.items)?o.items:[];
+    if(items.length===0){
+      rows.push([o.name,o.phone,'—','—',o.discounted]);
+    } else {
+      items.forEach((item,i)=>{
+        rows.push([
+          i===0?o.name:'',
+          i===0?o.phone:'',
+          item.name,
+          item.qty,
+          i===0?o.discounted:'',
+        ]);
+      });
+      if(items.length>1){
+        // Add separator row
+        rows.push(['','','','','']);
+      }
+    }
+  });
+
+  // Summary row
+  const totalAmt=paidOrders.reduce((s,o)=>s+(parseFloat(o.discounted)||0),0);
+  rows.push(['','','','合計',totalAmt]);
+
+  const ws=XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws['!cols']=[{wch:12},{wch:14},{wch:28},{wch:8},{wch:12}];
+
+  // Style header
+  XLSX.utils.book_append_sheet(wb,ws,'送貨明細');
+  XLSX.writeFile(wb,filename);
+  showToast(`已匯出 ${paidOrders.length} 筆已付款訂單 ✓`);
 }
 
 function exportXLSX(){if(window.XLSX){doExportXLSX();}else{showToast('載入 Excel 引擎…');const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=doExportXLSX;document.head.appendChild(s);}}
