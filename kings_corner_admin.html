@@ -779,6 +779,10 @@ async function loadData(){
     if(data.status!=='ok'){if(data.message?.includes('未授權'))doLogout();showToast('載入失敗：'+(data.message||''),'error');return;}
     campaigns=data.campaigns||[];orders=data.orders||[];suppliers=data.suppliers||[];
     products=data.products||[];adsData=data.ads||{};accounts=data.accounts||[];
+    promoCodes=(data.promoCodes||[]).map(p=>({
+      ...p,
+      status:(p.status===true||String(p.status).toUpperCase()==='TRUE')?'true':'false'
+    }));
     const mkt=data.marketing||{};
     marketingSettings={
       boostEnabled:mkt.boostEnabled!=='false',marqueeEnabled:mkt.marqueeEnabled!=='false',
