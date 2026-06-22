@@ -259,6 +259,13 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <select id="pay-filter-status" onchange="renderPayment()"><option value="">全部狀態</option><option value="unpaid">未付款</option><option value="paid">已付款</option></select>
       </div>
       <div class="total-bar" id="pay-totals"></div>
+      <!-- Batch bar for payment -->
+      <div id="pay-batch-bar" style="display:none;background:var(--dark3);border:1px solid var(--gold);border-radius:8px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:10px;flex-wrap:wrap">
+        <span id="pay-batch-count" style="font-size:13px;color:var(--gold);font-weight:700">已選 0 筆</span>
+        <button class="btn btn-gold btn-sm" onclick="payBatchPaid(true)">✓ 一鍵標記已付款</button>
+        <button class="btn btn-outline btn-sm" onclick="payBatchPaid(false)">✗ 標記未付款</button>
+        <button class="btn btn-outline btn-sm" onclick="clearPaySelection()" style="margin-left:auto">取消選取</button>
+      </div>
       <div class="table-wrap overflow-x" id="payment-table"></div>
     </div>
     <div class="page" id="page-history">
@@ -289,6 +296,13 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <select id="prod-filter-active" onchange="renderProducts()"><option value="active">啟用中</option><option value="all">全部</option><option value="inactive">停用</option></select>
       </div>
       <div class="total-bar" id="prod-totals"></div>
+      <!-- Product batch bar -->
+      <div id="prod-batch-bar" style="display:none;background:var(--dark3);border:1px solid var(--gold);border-radius:8px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:10px;flex-wrap:wrap">
+        <span id="prod-batch-count" style="font-size:13px;color:var(--gold);font-weight:700">已選 0 項</span>
+        <button class="btn btn-outline btn-sm" onclick="prodBatchActive(false)">⏸ 一鍵停用</button>
+        <button class="btn btn-gold btn-sm" onclick="prodBatchActive(true)">▶ 一鍵啟用</button>
+        <button class="btn btn-outline btn-sm" onclick="clearProdSelection()" style="margin-left:auto">取消選取</button>
+      </div>
       <div class="table-wrap overflow-x" id="products-table"></div>
     </div>
     <div class="page" id="page-suppliers">
@@ -1193,6 +1207,8 @@ function filterPayBySup(){
   const list=sid?campaigns.filter(c=>String(c.supplierId)===String(sid)):campaigns;
   const cur=el.value;el.innerHTML='<option value="">所有團購</option>'+list.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');if(cur)el.value=cur;renderPayment();
 }
+let selectedPayIds=new Set();
+
 function renderPayment(){
   const q=(document.getElementById('pay-search')?.value||'').toLowerCase();
   const sid=document.getElementById('pay-filter-supplier')?.value||'';
@@ -1207,9 +1223,71 @@ function renderPayment(){
   });
   const tot=list.reduce((s,o)=>s+(parseFloat(o.discounted)||0),0);
   const paid=list.filter(o=>o.paid).reduce((s,o)=>s+(parseFloat(o.discounted)||0),0);
-  document.getElementById('pay-totals').innerHTML=`<div class="tb-item"><div class="tb-label">應收</div><div class="tb-val">$${tot.toLocaleString()}</div></div><div class="tb-item"><div class="tb-label">已收</div><div class="tb-val" style="color:#5dca8a">$${paid.toLocaleString()}</div></div><div class="tb-item"><div class="tb-label">未收</div><div class="tb-val" style="color:#ff8080">$${(tot-paid).toLocaleString()}</div></div><div class="tb-item"><div class="tb-label">收款率</div><div class="tb-val">${tot?Math.round(paid/tot*100):0}%</div></div>`;
-  document.getElementById('payment-table').innerHTML=`<table><thead><tr><th>姓名</th><th>電話</th><th>團購</th><th>金額</th><th>狀態</th><th>操作</th></tr></thead><tbody>`+
-  list.map(o=>`<tr><td style="font-weight:700">${o.name}</td><td style="font-family:monospace;font-size:12px">${o.phone}</td><td style="font-size:11px;color:var(--muted)">${campName(o.campaignId)}</td><td><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--gold)">$${o.discounted}</span></td><td>${o.paid?'<span class="badge badge-paid">已付</span>':'<span class="badge badge-unpaid">未付</span>'}</td><td><button class="btn btn-sm ${o.paid?'btn-outline':'btn-gold'}" onclick="togglePaid('${o.id}')">${o.paid?'取消':'確認付款'}</button></td></tr>`).join('')+'</tbody></table>';
+  document.getElementById('pay-totals').innerHTML=`
+    <div class="tb-item"><div class="tb-label">應收</div><div class="tb-val">$${tot.toLocaleString()}</div></div>
+    <div class="tb-item"><div class="tb-label">已收</div><div class="tb-val" style="color:#5dca8a">$${paid.toLocaleString()}</div></div>
+    <div class="tb-item"><div class="tb-label">未收</div><div class="tb-val" style="color:#ff8080">$${(tot-paid).toLocaleString()}</div></div>
+    <div class="tb-item"><div class="tb-label">收款率</div><div class="tb-val">${tot?Math.round(paid/tot*100):0}%</div></div>`;
+  if(!list.length){document.getElementById('payment-table').innerHTML=`<div class="empty"><div class="empty-icon">💳</div><p>暫無訂單</p></div>`;return;}
+  document.getElementById('payment-table').innerHTML=`<table><thead><tr>
+    <th style="width:36px"><input type="checkbox" id="pay-select-all" onchange="togglePaySelectAll(this)" style="cursor:pointer;width:16px;height:16px"></th>
+    <th>姓名</th><th>電話</th><th>團購</th><th>優惠碼</th><th>金額</th><th>狀態</th><th>操作</th>
+  </tr></thead><tbody>`+
+  list.map(o=>`<tr id="prow-${o.id}" style="${selectedPayIds.has(o.id)?'background:rgba(201,168,76,0.08)':''}">
+    <td><input type="checkbox" class="pay-check" data-id="${o.id}" ${selectedPayIds.has(o.id)?'checked':''} onchange="togglePaySelect(this)" style="cursor:pointer;width:16px;height:16px"></td>
+    <td style="font-weight:700">${o.name}</td>
+    <td style="font-family:monospace;font-size:12px">${o.phone}</td>
+    <td style="font-size:11px;color:var(--muted)">${campName(o.campaignId)}</td>
+    <td><span style="font-size:11px;${o.promoCode&&o.promoCode!=='自然流量'?'color:var(--gold);font-weight:700':'color:var(--faint)'}">${o.promoCode||'自然流量'}</span></td>
+    <td><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--gold)">$${o.discounted}</span></td>
+    <td>${o.paid?'<span class="badge badge-paid">已付</span>':'<span class="badge badge-unpaid">未付</span>'}</td>
+    <td><button class="btn btn-sm ${o.paid?'btn-outline':'btn-gold'}" onclick="togglePaid('${o.id}')">${o.paid?'取消':'確認付款'}</button></td>
+  </tr>`).join('')+'</tbody></table>';
+}
+
+function togglePaySelect(cb){
+  const id=cb.dataset.id;
+  if(cb.checked)selectedPayIds.add(id);else selectedPayIds.delete(id);
+  const row=document.getElementById('prow-'+id);
+  if(row)row.style.background=cb.checked?'rgba(201,168,76,0.08)':'';
+  updatePayBatchBar();
+}
+function togglePaySelectAll(cb){
+  document.querySelectorAll('.pay-check').forEach(c=>{
+    c.checked=cb.checked;
+    const id=c.dataset.id;
+    if(cb.checked)selectedPayIds.add(id);else selectedPayIds.delete(id);
+    const row=document.getElementById('prow-'+id);
+    if(row)row.style.background=cb.checked?'rgba(201,168,76,0.08)':'';
+  });
+  updatePayBatchBar();
+}
+function clearPaySelection(){
+  selectedPayIds.clear();
+  document.querySelectorAll('.pay-check').forEach(c=>c.checked=false);
+  const allCb=document.getElementById('pay-select-all');
+  if(allCb)allCb.checked=false;
+  document.querySelectorAll('[id^="prow-"]').forEach(r=>r.style.background='');
+  updatePayBatchBar();
+}
+function updatePayBatchBar(){
+  const bar=document.getElementById('pay-batch-bar');
+  const cnt=document.getElementById('pay-batch-count');
+  if(!bar)return;
+  if(selectedPayIds.size>0){bar.style.display='flex';cnt.textContent=`已選 ${selectedPayIds.size} 筆`;}
+  else{bar.style.display='none';}
+}
+async function payBatchPaid(paid){
+  if(!selectedPayIds.size){showToast('請先勾選訂單','error');return;}
+  const ids=[...selectedPayIds];
+  loading(true,`更新 ${ids.length} 筆…`);
+  try{
+    const data=await api('GET',{action:'batchUpdatePaid',orderIds:JSON.stringify(ids),paid:String(paid)});
+    if(data.status!=='ok'){showToast(data.message||'更新失敗','error');return;}
+    orders.forEach(o=>{if(ids.includes(o.id))o.paid=paid;});
+    clearPaySelection();renderPayment();renderOrders();renderDashboard();
+    showToast(`已更新 ${data.updated} 筆 ${paid?'→ 已付款':'→ 未付款'} ✓`);
+  }catch(e){showToast('更新失敗','error');}finally{loading(false);}
 }
 
 let histTab='camps';
@@ -1261,9 +1339,76 @@ function renderProducts(){
   });
   document.getElementById('prod-totals').innerHTML=`<div class="tb-item"><div class="tb-label">符合商品</div><div class="tb-val">${list.length}</div></div><div class="tb-item"><div class="tb-label">啟用中</div><div class="tb-val" style="color:#5dca8a">${list.filter(p=>p.active!=='false').length}</div></div><div class="tb-item"><div class="tb-label">停用</div><div class="tb-val" style="color:var(--faint)">${list.filter(p=>p.active==='false').length}</div></div>`;
   if(!list.length){document.getElementById('products-table').innerHTML=`<div class="empty"><div class="empty-icon">📦</div><p>沒有符合商品</p></div>`;return;}
-  document.getElementById('products-table').innerHTML=`<table><thead><tr><th>商品名稱</th><th>廠商</th><th>分類</th><th>建議單價</th><th>規格</th><th>狀態</th><th></th></tr></thead><tbody>`+
-  list.map(p=>`<tr style="${p.active==='false'?'opacity:0.45':''}"><td style="font-weight:700">${p.name}</td><td style="font-size:11px;color:var(--muted)">${supName(p.supplierId)}</td><td><span class="badge badge-cat">${p.cat}</span></td><td><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--gold)">$${p.price}</span></td><td style="font-size:12px;color:var(--muted)">${p.spec||'—'}</td><td>${p.active==='false'?'<span class="badge badge-closed">停用</span>':'<span class="badge badge-active">啟用</span>'}</td><td style="display:flex;gap:6px"><button class="btn btn-outline btn-sm" onclick="editProduct('${p.id}')">編輯</button><button class="btn btn-outline btn-sm" onclick="toggleProductActive('${p.id}')">${p.active==='false'?'啟用':'停用'}</button></td></tr>`).join('')+'</tbody></table>';
+  document.getElementById('products-table').innerHTML=`<table><thead><tr>
+    <th style="width:36px"><input type="checkbox" id="prod-select-all" onchange="toggleProdSelectAll(this)" style="cursor:pointer;width:16px;height:16px"></th>
+    <th>商品名稱</th><th>廠商</th><th>分類</th><th>建議單價</th><th>規格</th><th>狀態</th><th></th>
+  </tr></thead><tbody>`+
+  list.map(p=>`<tr id="prodrow-${p.id}" style="${p.active==='false'?'opacity:0.45':''}${selectedProdIds.has(p.id)?';background:rgba(201,168,76,0.08)':''}">
+    <td><input type="checkbox" class="prod-check" data-id="${p.id}" ${selectedProdIds.has(p.id)?'checked':''} onchange="toggleProdSelect(this)" style="cursor:pointer;width:16px;height:16px"></td>
+    <td style="font-weight:700">${p.name}</td>
+    <td style="font-size:11px;color:var(--muted)">${supName(p.supplierId)}</td>
+    <td><span class="badge badge-cat">${p.cat}</span></td>
+    <td><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--gold)">$${p.price}</span></td>
+    <td style="font-size:12px;color:var(--muted)">${p.spec||'—'}</td>
+    <td>${p.active==='false'?'<span class="badge badge-closed">停用</span>':'<span class="badge badge-active">啟用</span>'}</td>
+    <td style="display:flex;gap:6px">
+      <button class="btn btn-outline btn-sm" onclick="editProduct('${p.id}')">編輯</button>
+      <button class="btn btn-outline btn-sm" onclick="toggleProductActive('${p.id}')">${p.active==='false'?'啟用':'停用'}</button>
+    </td>
+  </tr>`).join('')+'</tbody></table>';
 }
+let selectedProdIds=new Set();
+
+function toggleProdSelect(cb){
+  const id=cb.dataset.id;
+  if(cb.checked)selectedProdIds.add(id);else selectedProdIds.delete(id);
+  const row=document.getElementById('prodrow-'+id);
+  if(row)row.style.background=cb.checked?'rgba(201,168,76,0.08)':'';
+  updateProdBatchBar();
+}
+function toggleProdSelectAll(cb){
+  document.querySelectorAll('.prod-check').forEach(c=>{
+    c.checked=cb.checked;
+    const id=c.dataset.id;
+    if(cb.checked)selectedProdIds.add(id);else selectedProdIds.delete(id);
+    const row=document.getElementById('prodrow-'+id);
+    if(row)row.style.background=cb.checked?'rgba(201,168,76,0.08)':'';
+  });
+  updateProdBatchBar();
+}
+function clearProdSelection(){
+  selectedProdIds.clear();
+  document.querySelectorAll('.prod-check').forEach(c=>c.checked=false);
+  const allCb=document.getElementById('prod-select-all');
+  if(allCb)allCb.checked=false;
+  document.querySelectorAll('[id^="prodrow-"]').forEach(r=>r.style.background='');
+  updateProdBatchBar();
+}
+function updateProdBatchBar(){
+  const bar=document.getElementById('prod-batch-bar');
+  const cnt=document.getElementById('prod-batch-count');
+  if(!bar)return;
+  if(selectedProdIds.size>0){bar.style.display='flex';cnt.textContent=`已選 ${selectedProdIds.size} 項`;}
+  else{bar.style.display='none';}
+}
+async function prodBatchActive(active){
+  if(!selectedProdIds.size){showToast('請先勾選商品','error');return;}
+  const ids=[...selectedProdIds];
+  const activeStr=String(active);
+  loading(true,`更新 ${ids.length} 項商品…`);
+  let updated=0;
+  try{
+    for(const id of ids){
+      const p=products.find(x=>String(x.id)===String(id));
+      if(!p)continue;
+      const data=await api('GET',{action:'saveProduct',product:JSON.stringify({...p,active:activeStr})});
+      if(data.status==='ok'){p.active=activeStr;updated++;}
+    }
+    clearProdSelection();renderProducts();
+    showToast(`已${active?'啟用':'停用'} ${updated} 項商品 ✓`);
+  }catch(e){showToast('更新失敗','error');}finally{loading(false);}
+}
+
 function openNewProduct(){editProductId=null;document.getElementById('mp-title').textContent='新增商品';['p-name','p-cat','p-spec','p-img'].forEach(id=>document.getElementById(id).value='');document.getElementById('p-price').value='';document.getElementById('p-active').value='true';document.getElementById('p-delete-btn').style.display='none';populateSupFilter('p-supplier');document.getElementById('p-supplier').value='';document.getElementById('modal-product').classList.add('show');}
 function editProduct(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;editProductId=id;document.getElementById('mp-title').textContent='編輯商品';populateSupFilter('p-supplier');document.getElementById('p-supplier').value=String(p.supplierId||'');document.getElementById('p-name').value=p.name;document.getElementById('p-cat').value=p.cat||'';document.getElementById('p-price').value=p.price||'';document.getElementById('p-spec').value=p.spec||'';document.getElementById('p-img').value=p.img||'';document.getElementById('p-active').value=p.active==='false'?'false':'true';document.getElementById('p-delete-btn').style.display='inline-flex';document.getElementById('modal-product').classList.add('show');}
 async function saveProduct(){
