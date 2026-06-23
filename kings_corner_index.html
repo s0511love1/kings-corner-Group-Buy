@@ -458,7 +458,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
   <!-- Single promo code input for all campaigns -->
   <div style="padding:12px 16px;background:#fffdf5;border-bottom:2px solid #e8e4e0;display:flex;gap:8px;align-items:center">
     <div style="flex:1">
-      <div style="font-size:11px;color:#888;font-weight:700;margin-bottom:5px">🎟️ 優惠碼</div>
+      <div style="font-size:11px;color:#888;font-weight:700;margin-bottom:5px">🎟️ 優惠碼 <span style="font-size:10px;font-weight:400;color:#bbb">※ 每筆訂單限使用一組，可套用多個團購</span></div>
       <div style="display:flex;gap:8px">
         <input type="text" id="cart-global-promo" class="cart-promo-input"
           placeholder="輸入優惠碼（選填）"
@@ -832,17 +832,28 @@ function openCampaignForCart(campaignId){
   document.getElementById('home-page').style.display='none';
   document.getElementById('order-page').style.display='block';
   buildOrderPage();
+  updateCart(); // show pre-filled qty totals immediately
   startCountdown();
   window.scrollTo(0,0);
 }
 
-function addCurrentToCart(){
+async function addCurrentToCart(){
   const items=[];
   currentCampaign.products.forEach(p=>{
     const q=qty[p.id]||0;
     if(q>0)items.push({id:p.id,name:p.name,qty:q,price:p.price});
   });
   if(!items.length){showOrderToast('請先選擇至少一項商品','error');return;}
+
+  // Fix 3 Method B: if code entered but not yet validated, auto-validate first
+  const promoInput=document.getElementById('f-promo');
+  const typedCode=(promoInput?.value||'').trim().toUpperCase();
+  if(typedCode&&(!appliedPromo||appliedPromo.error||appliedPromo.code!==typedCode)){
+    showOrderToast('驗證優惠碼中…');
+    await applyPromoCode();
+    await new Promise(r=>setTimeout(r,150));
+  }
+
   // Carry over promoCode from order page if applied
   const existing=cart[currentCampaign.id];
   const existingPromo=existing?.promoResult||null;
@@ -1761,7 +1772,9 @@ function buildOrderPage(){
     c.products.filter(p=>p.cat===cat).map(p=>{
       qty[p.id]=0;
       const isSoldOut=p.remaining===0;
-      qty[p.id]=0;
+      if(qty[p.id]===undefined)qty[p.id]=0; // keep pre-filled qty
+      // Init stepper button states for pre-filled qty
+      const initQ=qty[p.id]||0;
       return `<div class="prod-item" style="${isSoldOut?'opacity:0.5':''}">
         ${thumbHtml(p)}
         <div class="prod-info">
@@ -1777,7 +1790,7 @@ function buildOrderPage(){
           <div class="prod-price-txt">$${p.price} <small>/份</small></div>
           <div class="stepper" id="stp-${p.id}">
             <button onclick="chg('${p.id}',-1)">−</button>
-            <input type="number" class="qty-n qty-input" id="qn-${p.id}" value="0" min="0"
+            <input type="number" class="qty-n qty-input" id="qn-${p.id}" value="${qty[p.id]||0}" min="0"
               style="width:42px;text-align:center;border:none;background:transparent;font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--dark);outline:none;-moz-appearance:textfield"
               oninput="setQty('${p.id}',parseInt(this.value)||0)"
               onblur="syncQtyInput('${p.id}')"
