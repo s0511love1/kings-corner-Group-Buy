@@ -80,22 +80,33 @@ function ensureSheet(name, headers) {
 }
 
 // 寫入或更新一列（依 idField 比對）
+// 注意：依照 Sheets 實際欄位順序寫入，不假設與 headers 陣列順序一致
 function upsertRow(sheetName, headers, record, idField) {
   const sheet = ensureSheet(sheetName, headers);
   const data = sheet.getDataRange().getValues();
-  const hRow = data[0];
+  const hRow = data[0]; // Actual sheet headers (may differ from headers param)
   const idCol = hRow.indexOf(idField);
 
-  // Update existing
+  // Build row values based on ACTUAL sheet column order
+  const totalCols = Math.max(hRow.length, headers.length);
+  function buildRow(actualHeaders) {
+    return actualHeaders.map(h => {
+      if (h === '' || h === undefined) return '';
+      return record[h] !== undefined ? record[h] : '';
+    });
+  }
+
+  // Update existing row
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][idCol]) === String(record[idField])) {
-      const rowVals = headers.map(h => record[h] ?? '');
-      sheet.getRange(i + 1, 1, 1, headers.length).setValues([rowVals]);
+      const rowVals = buildRow(hRow);
+      sheet.getRange(i + 1, 1, 1, hRow.length).setValues([rowVals]);
       return;
     }
   }
-  // Insert new
-  const rowVals = headers.map(h => record[h] ?? '');
+  // Insert new row — use actual headers after ensureSheet added any missing cols
+  const freshHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const rowVals = buildRow(freshHeaders);
   sheet.appendRow(rowVals);
 }
 
