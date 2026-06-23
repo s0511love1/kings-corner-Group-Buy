@@ -405,7 +405,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 
     <!-- Step 1: 填資料 -->
     <div class="form-card">
-      <div class="form-card-hd"><div class="step-dot">1</div>優惠碼（選填）</div>
+      <div class="form-card-hd"><div class="step-dot">1</div>優惠碼（選填）<span style="font-size:10px;font-weight:400;color:rgba(201,168,76,0.6);letter-spacing:0;text-transform:none;margin-left:6px">※ 每筆訂單限使用一組，可套用多個團購</span></div>
       <div class="field" style="padding:14px 16px">
         <div style="display:flex;gap:8px">
           <input type="text" id="f-promo" placeholder="輸入優惠碼" autocomplete="off" style="flex:1;text-transform:uppercase;font-size:15px"
@@ -574,7 +574,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 <div class="success-wrap" id="success-wrap">
   <div class="success-icon">✓</div>
   <div class="success-title">訂單已送出！</div>
-  <div class="success-sub">感謝你參加 King's Corner 團購<br>請於截止日前完成付款</div>
+  <div class="success-sub">感謝你參加 King's Corner 團購<br>請於截止日前完成付款<br><span style="font-size:12px;color:rgba(201,168,76,0.7)">※ 截止日前未完成付款，訂單視同不成立</span></div>
   <div class="success-detail" id="success-detail"></div>
   <button class="back-home-btn" onclick="goHome()">← 回到首頁</button>
 </div>
@@ -1249,7 +1249,12 @@ async function submitCart(){
   // Check notes confirmed
   const cb=document.getElementById('notes-confirm-cb');
   const hasNotes=Object.values(cart).some(e=>e.campaign.note);
-  if(hasNotes&&cb&&!cb.checked){errEl.textContent='請先勾選「已閱讀並了解備註說明」';errEl.style.display='block';return;}
+  if(hasNotes&&(!cb||!cb.checked)){
+    errEl.textContent='請先勾選「已閱讀並了解備註 / 付款說明」';
+    errEl.style.display='block';
+    cb?.scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
   errEl.style.display='none';
 
   const entries=Object.values(cart);
@@ -1303,10 +1308,11 @@ async function submitCart(){
   btn.disabled=false;btn.textContent='確認送出訂單';
 
   if(allSuccess){
-    // Show success
+    // Only clear cart after confirmed success
+    const savedName=name, savedPhone=phone;
     cart={};updateCartBadge();
     closeCartPage();
-    showCartSuccess(name,phone,orderIds,shipLabel,shippingFee);
+    showCartSuccess(savedName,savedPhone,orderIds,shipLabel,shippingFee);
   } else {
     errEl.textContent='部分訂單失敗：'+failedCamps.join('、');
     errEl.style.display='block';
