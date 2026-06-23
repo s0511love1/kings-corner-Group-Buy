@@ -554,52 +554,23 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     <div class="modal-hd"><h3 id="mpc-title">新增優惠碼</h3><button class="modal-close" onclick="closeModal('modal-promo')">×</button></div>
     <div class="modal-body">
       <div class="form-row" style="margin-bottom:14px">
-        <div class="ff" style="margin-bottom:0"><label>優惠碼 *</label><input type="text" id="pc-code" placeholder="例：ALICE86" style="text-transform:uppercase"></div>
-        <div class="ff" style="margin-bottom:0"><label>團購主名稱 *</label><input type="text" id="pc-name" placeholder="例：Alice Wang"></div>
+        <div class="ff" style="margin-bottom:0"><label>優惠碼 *</label><input type="text" id="pc-code" placeholder="例：BOB88" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div>
+        <div class="ff" style="margin-bottom:0"><label>團購主名稱 *</label><input type="text" id="pc-name" placeholder="例：Bob Wang"></div>
       </div>
-      <div class="ff"><label>聯絡方式</label><input type="text" id="pc-contact" placeholder="LINE ID / 電話"></div>
-      <div class="ff" style="margin-bottom:14px">
-        <label>折扣類型</label>
-        <select id="pc-discount-type" onchange="updatePromoDiscountUI()">
-          <option value="percent">百分比折扣（覆蓋團購折扣）</option>
-          <option value="amount_per_unit">每份折固定金額</option>
-          <option value="amount_threshold">滿額折扣</option>
-          <option value="none">純追蹤（不改變價格）</option>
-        </select>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="ff" style="margin-bottom:0"><label>聯絡方式</label><input type="text" id="pc-contact" placeholder="LINE ID / 電話"></div>
+        <div class="ff" style="margin-bottom:0"><label>狀態</label><select id="pc-status"><option value="true">啟用</option><option value="false">停用</option></select></div>
       </div>
-      <div id="pc-discount-config" style="background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
-        <!-- percent -->
-        <div id="cfg-percent">
-          <div class="ff" style="margin-bottom:0"><label>折扣值（折）</label>
-          <input type="number" id="pc-discount-value" placeholder="例：83 = 83折" min="1" max="100">
-          <div style="font-size:11px;color:var(--faint);margin-top:4px">輸入 83 = 打83折，覆蓋團購預設折扣</div></div>
-        </div>
-        <!-- amount_per_unit -->
-        <div id="cfg-amount-per-unit" style="display:none">
-          <div class="ff" style="margin-bottom:0"><label>每份折扣金額（元）</label>
-          <input type="number" id="pc-per-unit" placeholder="例：5 = 每份 -$5" min="1">
-          <div style="font-size:11px;color:var(--faint);margin-top:4px">客人購買 N 份，共折 N × 金額</div></div>
-        </div>
-        <!-- amount_threshold -->
-        <div id="cfg-threshold" style="display:none">
-          <div class="form-row">
-            <div class="ff" style="margin-bottom:0"><label>滿額門檻（元）</label>
-            <input type="number" id="pc-threshold" placeholder="例：1000" min="1"></div>
-            <div class="ff" style="margin-bottom:0"><label>折扣金額（元）</label>
-            <input type="number" id="pc-threshold-off" placeholder="例：100" min="1"></div>
-          </div>
-          <div style="font-size:11px;color:var(--faint);margin-top:4px">訂單金額達門檻後折扣，不達門檻按原價</div>
-        </div>
-        <!-- none -->
-        <div id="cfg-none" style="display:none">
-          <div style="font-size:13px;color:var(--muted)">純追蹤模式：客人使用此碼不影響價格，只記錄使用次數。</div>
-        </div>
-      </div>
-      <div class="ff"><label>備註</label><input type="text" id="pc-note" placeholder="獎金規則備註…"></div>
+      <!-- Per-campaign rules -->
       <div class="ff">
-        <label>狀態</label>
-        <select id="pc-status"><option value="true">啟用</option><option value="false">停用</option></select>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label style="margin-bottom:0">各團購折扣規則</label>
+          <button class="btn btn-outline btn-sm" onclick="addCampaignRule()">＋ 新增規則</button>
+        </div>
+        <div style="font-size:11px;color:var(--faint);margin-bottom:10px">未設定規則的團購預設為「不允許使用」。</div>
+        <div id="pc-rules-list" style="display:flex;flex-direction:column;gap:8px"></div>
       </div>
+      <div class="ff"><label>備註</label><input type="text" id="pc-note" placeholder="獎金規則、備註說明…"></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-danger btn-sm" id="pc-delete-btn" style="display:none;margin-right:auto" onclick="deletePromo()">刪除</button>
@@ -858,7 +829,7 @@ function populateSupFilter(elId){
 
 function renderAll(){
   renderDashboard();renderCampaigns();renderProducts();renderSuppliers();
-  ['camp-filter-supplier','order-filter-supplier','pay-filter-supplier','hist-camp-supplier','hist-order-supplier','p-supplier'].forEach(id=>populateSupFilter(id));
+  ['camp-filter-supplier','order-filter-supplier','pay-filter-supplier','hist-camp-supplier','hist-order-supplier','p-supplier','prod-filter-sup'].forEach(id=>populateSupFilter(id));
   populateCampaignSel('c-supplier-sel');
 }
 
@@ -1837,21 +1808,70 @@ async function loadPromoStats(){
   }catch(e){showToast('載入失敗','error');}finally{loading(false);}
 }
 
-function updatePromoDiscountUI(){
-  const type=document.getElementById('pc-discount-type').value;
-  document.getElementById('cfg-percent').style.display=type==='percent'?'block':'none';
-  document.getElementById('cfg-amount-per-unit').style.display=type==='amount_per_unit'?'block':'none';
-  document.getElementById('cfg-threshold').style.display=type==='amount_threshold'?'block':'none';
-  document.getElementById('cfg-none').style.display=type==='none'?'block':'none';
+function updatePromoDiscountUI(){} // kept for compatibility
+
+function buildRuleHtml(rule, idx){
+  const campName = rule.campaignId === '*' ? '（預設規則）' :
+    (campaigns.find(c=>String(c.id)===String(rule.campaignId))?.name || rule.campaignId);
+  let cfg = {};
+  try{ cfg = JSON.parse(rule.discountValue||'{}'); }catch(e){}
+  const types = [
+    {v:'none',l:'純追蹤'},
+    {v:'percent',l:'百分比折扣'},
+    {v:'amount_per_unit',l:'每份折固定金額'},
+    {v:'amount_threshold',l:'滿額折扣'}
+  ];
+  return `<div class="rule-row" id="rule-${idx}" style="background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="font-size:12px;font-weight:700;color:var(--gold)">${campName}</div>
+      ${rule.campaignId!=='*'?`<button class="btn btn-danger btn-sm" onclick="removeCampaignRule(${idx})">移除</button>`:''}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      ${rule.campaignId!=='*'?`<div style="flex:1;min-width:140px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">團購</div>
+        <select onchange="updateRule(${idx},'campaignId',this.value)" style="width:100%;background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none">
+          ${campaigns.filter(c=>c.status!=='closed').map(c=>`<option value="${c.id}" ${String(c.id)===String(rule.campaignId)?'selected':''}>${c.name}</option>`).join('')}
+        </select>
+      </div>`:''}
+      <div style="flex:1;min-width:140px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">折扣類型</div>
+        <select onchange="updateRule(${idx},'discountType',this.value);renderRules()" style="width:100%;background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none">
+          ${types.map(t=>`<option value="${t.v}" ${rule.discountType===t.v?'selected':''}>${t.l}</option>`).join('')}
+        </select>
+      </div>
+      ${rule.discountType==='percent'?`<div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">折數</div><input type="number" value="${cfg.value||''}" placeholder="83" min="1" max="100" onchange="updateRuleCfg(${idx},'value',this.value)" style="width:80px;background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:7px;font-size:13px;color:var(--gold);font-family:'Bebas Neue',sans-serif;text-align:center;outline:none"></div>`:''}
+      ${rule.discountType==='amount_per_unit'?`<div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">每份折（元）</div><input type="number" value="${cfg.perUnit||''}" placeholder="5" min="1" onchange="updateRuleCfg(${idx},'perUnit',this.value)" style="width:80px;background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:7px;font-size:13px;color:var(--gold);font-family:'Bebas Neue',sans-serif;text-align:center;outline:none"></div>`:''}
+      ${rule.discountType==='amount_threshold'?`<div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">滿額</div><input type="number" value="${cfg.threshold||''}" placeholder="1000" min="1" onchange="updateRuleCfg(${idx},'threshold',this.value)" style="width:80px;background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:7px;font-size:12px;color:var(--text);text-align:center;outline:none;font-family:'Noto Sans TC',sans-serif"></div>
+      <div><div style="font-size:10px;color:var(--muted);margin-bottom:4px">折扣</div><input type="number" value="${cfg.off||''}" placeholder="100" min="1" onchange="updateRuleCfg(${idx},'off',this.value)" style="width:80px;background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:7px;font-size:12px;color:var(--text);text-align:center;outline:none;font-family:'Noto Sans TC',sans-serif"></div>`:''}
+    </div>
+  </div>`;
+}
+
+let editingRules = [];
+
+function renderRules(){
+  document.getElementById('pc-rules-list').innerHTML = editingRules.map((r,i)=>buildRuleHtml(r,i)).join('');
+}
+function addCampaignRule(){
+  const firstCamp = campaigns.find(c=>c.status!=='closed');
+  editingRules.push({campaignId: firstCamp?.id||'', discountType:'none', discountValue:'{}'});
+  renderRules();
+}
+function removeCampaignRule(idx){editingRules.splice(idx,1);renderRules();}
+function updateRule(idx,field,val){editingRules[idx][field]=val;}
+function updateRuleCfg(idx,field,val){
+  let cfg={};
+  try{cfg=JSON.parse(editingRules[idx].discountValue||'{}');}catch(e){}
+  cfg[field]=val;
+  editingRules[idx].discountValue=JSON.stringify(cfg);
 }
 function openNewPromo(){
   editPromoId=null;
   document.getElementById('mpc-title').textContent='新增優惠碼';
-  ['pc-code','pc-name','pc-contact','pc-note','pc-discount-value','pc-per-unit','pc-threshold','pc-threshold-off'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('pc-discount-type').value='percent';
+  ['pc-code','pc-name','pc-contact','pc-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('pc-status').value='true';
   document.getElementById('pc-delete-btn').style.display='none';
-  updatePromoDiscountUI();
+  editingRules=[];renderRules();
   document.getElementById('modal-promo').classList.add('show');
 }
 function openEditPromo(id){
@@ -1861,18 +1881,9 @@ function openEditPromo(id){
   document.getElementById('pc-code').value=p.code;
   document.getElementById('pc-name').value=p.name;
   document.getElementById('pc-contact').value=p.contact||'';
-  const dtype=p.discountType||'percent';
-  document.getElementById('pc-discount-type').value=dtype;
-  updatePromoDiscountUI();
-  let dconfig={};
-  try{dconfig=JSON.parse(p.discountValue||'{}');}catch(e){
-    // Legacy: plain number was stored as discountValue
-    if(p.discountValue)dconfig={value:p.discountValue};
-  }
-  if(document.getElementById('pc-discount-value'))document.getElementById('pc-discount-value').value=dconfig.value||'';
-  if(document.getElementById('pc-per-unit'))document.getElementById('pc-per-unit').value=dconfig.perUnit||'';
-  if(document.getElementById('pc-threshold'))document.getElementById('pc-threshold').value=dconfig.threshold||'';
-  if(document.getElementById('pc-threshold-off'))document.getElementById('pc-threshold-off').value=dconfig.off||'';
+  let loadedRules=[];
+  try{loadedRules=JSON.parse(p.campaignRules||'[]');}catch(e){}
+  editingRules=loadedRules;renderRules();
   document.getElementById('pc-note').value=p.note||'';
   document.getElementById('pc-status').value=p.status;
   document.getElementById('pc-delete-btn').style.display='inline-flex';
@@ -1885,20 +1896,12 @@ async function savePromo(){
   if(!name){showToast('請輸入團購主名稱','error');return;}
   // Check duplicate code
   if(!editPromoId && promoCodes.find(p=>p.code.toUpperCase()===code.toUpperCase())){showToast(`優惠碼「${code}」已存在，請使用不同的代碼`,'error');return;}
-  const discountType=document.getElementById('pc-discount-type').value;
-  let discountConfig={};
-  if(discountType==='percent'){
-    discountConfig={value:document.getElementById('pc-discount-value').value||''};
-  } else if(discountType==='amount_per_unit'){
-    discountConfig={perUnit:document.getElementById('pc-per-unit').value||''};
-  } else if(discountType==='amount_threshold'){
-    discountConfig={threshold:document.getElementById('pc-threshold').value||'',off:document.getElementById('pc-threshold-off').value||''};
-  }
   const promoCode={
     id:editPromoId||'',code,name,
     contact:document.getElementById('pc-contact').value.trim(),
-    discountType,
-    discountValue:JSON.stringify(discountConfig),
+    discountType:'none', // kept for compatibility, rules are in campaignRules
+    discountValue:'{}',
+    campaignRules:JSON.stringify(editingRules),
     status:document.getElementById('pc-status').value,
     note:document.getElementById('pc-note').value.trim(),
   };
@@ -2019,7 +2022,10 @@ function doExportXLSX(){const wb=XLSX.utils.book_new();const today=new Date().to
 
 function closeModal(id){document.getElementById(id)?.classList.remove('show');}
 function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.style.background=type==='error'?'#4d1a1a':'#1e4d2b';t.style.borderColor=type==='error'?'#c8272d':'#2e7d32';t.style.color=type==='error'?'#ff8080':'#a5d6a7';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
-document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show');}));
+document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{
+  // Don't close campaign wizard on outside click (prevents accidental data loss)
+  if(e.target===m&&m.id!=='modal-campaign')m.classList.remove('show');
+}));
 </script>
 </body>
 </html>

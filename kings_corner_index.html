@@ -239,6 +239,58 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 .recent-text{font-size:11px;color:#999}
 .recent-text strong{color:var(--dark);font-weight:700}
 
+/* ── CART SYSTEM ── */
+#cart-page{display:none;position:fixed;inset:0;background:#fff;z-index:400;overflow-y:auto}
+.cart-page-hd{position:sticky;top:0;background:#fff;border-bottom:2px solid #e8e4e0;padding:14px 16px;display:flex;align-items:center;gap:12px;z-index:10}
+.cart-back-btn{background:none;border:none;font-size:22px;cursor:pointer;color:var(--dark);padding:0 4px;touch-action:manipulation}
+.cart-page-title{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;color:var(--dark)}
+.cart-badge{background:var(--red);color:white;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;min-width:20px;text-align:center}
+.cart-supplier-section{border-bottom:2px solid #e8e4e0;margin-bottom:0}
+.cart-sup-hd{background:#f7f4f0;padding:12px 16px;display:flex;align-items:center;gap:8px}
+.cart-sup-name{font-size:13px;font-weight:700;color:var(--dark)}
+.cart-sup-camp{font-size:11px;color:#aaa}
+.cart-item-row{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid #f0ede8}
+.cart-item-name{flex:1;font-size:13px;font-weight:600;color:var(--dark)}
+.cart-item-spec{font-size:11px;color:#aaa}
+.cart-item-price{font-size:13px;color:var(--dark);white-space:nowrap}
+.cart-promo-row{padding:10px 16px;background:#fffdf5;border-bottom:1px solid #f0ede8;display:flex;gap:8px;align-items:center}
+.cart-promo-input{flex:1;background:#fff;border:1.5px solid #e8e4e0;border-radius:8px;padding:9px 12px;font-size:14px;color:var(--dark);font-family:'Noto Sans TC',sans-serif;outline:none;transition:border-color 0.15s;text-transform:uppercase}
+.cart-promo-input:focus{border-color:var(--gold)}
+.cart-promo-btn{background:var(--dark);color:var(--gold);border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:'Noto Sans TC',sans-serif;touch-action:manipulation}
+.cart-promo-result{padding:0 16px 10px;font-size:12px}
+.cart-subtotal{padding:10px 16px 14px;display:flex;justify-content:space-between;align-items:center;background:#f7f4f0}
+.cart-subtotal-label{font-size:12px;color:#aaa}
+.cart-subtotal-amount{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--dark)}
+.cart-checkout-section{padding:16px;background:#fff}
+.cart-section-title{font-size:11px;font-weight:700;color:#aaa;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px}
+.cart-option-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.cart-option-btn{flex:1;min-width:120px;padding:11px 10px;border-radius:10px;border:2px solid #e8e4e0;background:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans TC',sans-serif;color:var(--dark);text-align:center;transition:all 0.15s;touch-action:manipulation}
+.cart-option-btn.selected{border-color:var(--dark);background:var(--dark);color:var(--gold)}
+.cart-option-btn .opt-sub{font-size:11px;font-weight:400;color:#aaa;margin-top:2px}
+.cart-option-btn.selected .opt-sub{color:rgba(201,168,76,0.7)}
+.cart-field-row{margin-bottom:12px}
+.cart-field-label{font-size:11px;font-weight:700;color:#888;margin-bottom:5px;display:flex;align-items:center;gap:4px}
+.cart-field-req{color:var(--red);font-size:12px}
+.cart-field-input{width:100%;background:#fff;border:1.5px solid #e8e4e0;border-radius:8px;padding:11px 13px;font-size:15px;color:var(--dark);font-family:'Noto Sans TC',sans-serif;outline:none;transition:border-color 0.15s}
+.cart-field-input:focus{border-color:var(--dark)}
+.cart-order-summary{background:#f7f4f0;border-radius:12px;padding:14px;margin:12px 0}
+.cart-summary-row{display:flex;justify-content:space-between;font-size:13px;color:var(--dark);margin-bottom:6px}
+.cart-summary-row:last-child{margin-bottom:0;font-weight:700;font-size:15px;padding-top:8px;border-top:1px solid #e8e4e0}
+.cart-empty{text-align:center;padding:64px 24px;color:#aaa}
+.cart-empty-icon{font-size:48px;margin-bottom:12px}
+.cart-submit-btn{width:100%;background:var(--dark);color:var(--gold);border:none;border-radius:12px;padding:16px;font-size:15px;font-weight:700;letter-spacing:2px;font-family:'Noto Sans TC',sans-serif;cursor:pointer;margin-top:8px;touch-action:manipulation;transition:opacity 0.15s}
+.cart-submit-btn:disabled{opacity:0.4;cursor:not-allowed}
+
+/* ── Cart icon on homepage ── */
+.cart-icon-btn{position:fixed;bottom:24px;right:16px;width:56px;height:56px;background:var(--dark);border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 20px rgba(0,0,0,0.25);z-index:300;touch-action:manipulation;transition:transform 0.15s}
+.cart-icon-btn:active{transform:scale(0.93)}
+.cart-icon-badge{position:absolute;top:-4px;right:-4px;background:var(--red);color:white;font-size:10px;font-weight:700;padding:2px 5px;border-radius:20px;min-width:18px;text-align:center;display:none}
+
+/* ── ADD TO CART button on camp cards ── */
+.camp-cta-row{display:flex;gap:8px;margin-top:12px}
+.camp-cta-main{flex:1;background:var(--dark);color:var(--gold);border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:700;font-family:'Noto Sans TC',sans-serif;cursor:pointer;touch-action:manipulation}
+.camp-cta-cart{background:transparent;border:2px solid var(--dark);border-radius:10px;padding:13px 14px;font-size:16px;cursor:pointer;touch-action:manipulation}
+
 /* ── ORDER CONFIRM MODAL ── */
 .confirm-modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:600;align-items:flex-end;justify-content:center;padding:0}
 .confirm-modal-bg.show{display:flex}
@@ -384,11 +436,77 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
       <div class="cart-chips-wrap" id="cart-chips"></div>
       <div class="cart-total-num">$<span id="cart-total">0</span></div>
     </div>
-    <button class="submit-btn" onclick="submitOrder()">確認送出訂單</button>
+    <button class="submit-btn" id="submit-btn" onclick="addCurrentToCart()">🛒 加入購物車</button>
   </div>
 </div>
 
 <!-- SUCCESS -->
+<!-- CART ICON BUTTON -->
+<button class="cart-icon-btn" id="cart-icon-btn" onclick="openCartPage()" style="display:none">
+  🛒
+  <span class="cart-icon-badge" id="cart-icon-badge">0</span>
+</button>
+
+<!-- CART PAGE -->
+<div id="cart-page">
+  <div class="cart-page-hd">
+    <button class="cart-back-btn" onclick="closeCartPage()">←</button>
+    <div class="cart-page-title">購物車</div>
+    <span class="cart-badge" id="cart-page-badge">0</span>
+    <div style="flex:1"></div>
+    <button onclick="clearCart()" style="background:none;border:none;font-size:12px;color:#aaa;cursor:pointer;font-family:'Noto Sans TC',sans-serif">清空</button>
+  </div>
+  <div id="cart-items-container"></div>
+  <!-- Checkout section -->
+  <div class="cart-checkout-section" id="cart-checkout-section" style="display:none">
+    <div class="cart-section-title">取貨方式</div>
+    <div class="cart-option-row">
+      <button class="cart-option-btn selected" id="ship-btn-pickup" onclick="selectShipping('pickup')">
+        🏪 自取<div class="opt-sub">$0 · 時間地點見備註</div>
+      </button>
+      <button class="cart-option-btn" id="ship-btn-711" onclick="selectShipping('711')">
+        🏬 7-11 取貨<div class="opt-sub">運費 $65</div>
+      </button>
+      <button class="cart-option-btn" id="ship-btn-blackcat" onclick="selectShipping('blackcat')">
+        🐱 黑貓宅急便<div class="opt-sub">運費 $170</div>
+      </button>
+    </div>
+    <div class="cart-section-title">付款方式</div>
+    <div class="cart-option-row">
+      <button class="cart-option-btn" id="pay-btn-transfer" onclick="selectPayment('transfer')">
+        🏦 匯款
+      </button>
+      <button class="cart-option-btn selected" id="pay-btn-cash" onclick="selectPayment('cash')" style="display:none">
+        💵 現金（限自取）
+      </button>
+    </div>
+    <div class="cart-section-title">收件資料</div>
+    <div class="cart-field-row">
+      <div class="cart-field-label">姓名 <span class="cart-field-req">*</span></div>
+      <input type="text" class="cart-field-input" id="cart-name" placeholder="請輸入姓名" autocomplete="name">
+    </div>
+    <div class="cart-field-row">
+      <div class="cart-field-label">手機 <span class="cart-field-req">*</span></div>
+      <input type="tel" class="cart-field-input" id="cart-phone" placeholder="09XXXXXXXX" maxlength="10" autocomplete="tel">
+    </div>
+    <div class="cart-field-row" id="cart-address-row" style="display:none">
+      <div class="cart-field-label">收件地址 <span class="cart-field-req">*</span></div>
+      <input type="text" class="cart-field-input" id="cart-address" placeholder="縣市區里街道門號" autocomplete="street-address">
+    </div>
+    <!-- Order summary -->
+    <div class="cart-order-summary" id="cart-summary"></div>
+    <div id="cart-submit-error" style="color:var(--red);font-size:12px;margin-bottom:8px;display:none"></div>
+    <button class="cart-submit-btn" id="cart-submit-btn" onclick="submitCart()">確認送出訂單</button>
+    <div style="font-size:11px;color:#aaa;text-align:center;margin-top:10px">送出後將收到訂單確認，請依付款說明完成付款</div>
+  </div>
+  <div class="cart-empty" id="cart-empty" style="display:none">
+    <div class="cart-empty-icon">🛒</div>
+    <div style="font-size:15px;font-weight:700;color:var(--dark);margin-bottom:6px">購物車是空的</div>
+    <div style="font-size:13px">回首頁選購商品吧！</div>
+    <button onclick="closeCartPage()" style="margin-top:16px;background:var(--dark);color:var(--gold);border:none;border-radius:10px;padding:12px 28px;font-size:14px;font-weight:700;font-family:'Noto Sans TC',sans-serif;cursor:pointer">← 繼續選購</button>
+  </div>
+</div>
+
 <!-- ORDER CONFIRM MODAL -->
 <div class="confirm-modal-bg" id="confirm-modal-bg">
   <div class="confirm-modal">
@@ -651,6 +769,324 @@ function thumbHtml(p) {
 let currentCampaign=null, currentSupplierId=null, qty={}, cdTimer=null;
 let appliedPromo=null;
 
+// ── CART STATE ──
+// cart = { [campaignId]: { campaign, items: [{id,name,qty,price}], promoCode, promoResult } }
+let cart = {};
+let cartShipping = 'pickup'; // pickup / 711 / blackcat
+let cartPayment = 'transfer'; // transfer / cash
+
+const SHIPPING_OPTIONS = {
+  pickup:   { label:'自取', fee:0, icon:'🏪' },
+  '711':    { label:'7-11 取貨', fee:65, icon:'🏬' },
+  blackcat: { label:'黑貓宅急便', fee:170, icon:'🐱' },
+};
+
+// ── CART HELPERS ──
+function cartItemCount(){
+  return Object.values(cart).reduce((s,c)=>s+c.items.reduce((ss,i)=>ss+(i.qty||0),0),0);
+}
+function cartCampaignCount(){return Object.keys(cart).length;}
+function updateCartBadge(){
+  const cnt=cartItemCount();
+  const iconBtn=document.getElementById('cart-icon-btn');
+  const badge=document.getElementById('cart-icon-badge');
+  if(iconBtn){iconBtn.style.display=cnt>0?'flex':'none';}
+  if(badge){badge.textContent=cnt;badge.style.display=cnt>0?'block':'none';}
+}
+
+// ── ADD TO CART ──
+function addToCart(campaignId){
+  const c=CAMPAIGNS.find(x=>String(x.id)===String(campaignId));
+  if(!c)return;
+  // If already in cart, just open cart
+  if(cart[campaignId]){openCartPage();return;}
+  // Open order page to select items, then "add to cart" instead of submit
+  openCampaignForCart(campaignId);
+}
+
+function openCampaignForCart(campaignId){
+  const c=CAMPAIGNS.find(x=>String(x.id)===String(campaignId));
+  if(!c||c.status!=='active')return;
+  currentCampaign=c; qty={};
+  appliedPromo=null;
+  document.getElementById('home-page').style.display='none';
+  document.getElementById('order-page').style.display='block';
+  buildOrderPage();
+  startCountdown();
+  window.scrollTo(0,0);
+}
+
+function addCurrentToCart(){
+  const items=[];
+  currentCampaign.products.forEach(p=>{
+    const q=qty[p.id]||0;
+    if(q>0)items.push({id:p.id,name:p.name,qty:q,price:p.price});
+  });
+  if(!items.length){alert('請選擇至少一項商品');return;}
+  cart[currentCampaign.id]={
+    campaign:{...currentCampaign},
+    items,
+    promoCode:'',
+    promoResult:null,
+  };
+  updateCartBadge();
+  closeOrderPage();
+  openCartPage();
+}
+
+function closeOrderPage(){
+  clearInterval(cdTimer);
+  document.getElementById('order-page').style.display='none';
+}
+
+// ── CART PAGE ──
+function openCartPage(){
+  renderCartPage();
+  document.getElementById('cart-page').style.display='block';
+  document.body.style.overflow='hidden';
+  window.scrollTo(0,0);
+}
+function closeCartPage(){
+  document.getElementById('cart-page').style.display='none';
+  document.body.style.overflow='';
+}
+function clearCart(){
+  if(!confirm('確定清空購物車？'))return;
+  cart={};
+  updateCartBadge();
+  renderCartPage();
+}
+
+function selectShipping(type){
+  cartShipping=type;
+  ['pickup','711','blackcat'].forEach(t=>{
+    const btn=document.getElementById('ship-btn-'+t);
+    if(btn)btn.classList.toggle('selected',t===type);
+  });
+  // Cash only available for pickup
+  const cashBtn=document.getElementById('pay-btn-cash');
+  if(cashBtn)cashBtn.style.display=type==='pickup'?'block':'none';
+  if(type!=='pickup'&&cartPayment==='cash'){
+    cartPayment='transfer';
+    selectPayment('transfer');
+  }
+  // Show address for delivery options
+  const addrRow=document.getElementById('cart-address-row');
+  if(addrRow)addrRow.style.display=(type==='711'||type==='blackcat')?'block':'none';
+  updateCartSummary();
+}
+function selectPayment(type){
+  cartPayment=type;
+  ['transfer','cash'].forEach(t=>{
+    const btn=document.getElementById('pay-btn-'+t);
+    if(btn)btn.classList.toggle('selected',t===type);
+  });
+  // Show cash button only for pickup
+  const cashBtn=document.getElementById('pay-btn-cash');
+  if(cashBtn)cashBtn.style.display=cartShipping==='pickup'?'block':'none';
+}
+
+function renderCartPage(){
+  const container=document.getElementById('cart-items-container');
+  const emptyEl=document.getElementById('cart-empty');
+  const checkoutEl=document.getElementById('cart-checkout-section');
+  const badgeEl=document.getElementById('cart-page-badge');
+  const cnt=cartItemCount();
+  if(badgeEl)badgeEl.textContent=cnt;
+
+  if(cnt===0){
+    container.innerHTML='';
+    if(emptyEl)emptyEl.style.display='block';
+    if(checkoutEl)checkoutEl.style.display='none';
+    return;
+  }
+  if(emptyEl)emptyEl.style.display='none';
+  if(checkoutEl)checkoutEl.style.display='block';
+
+  let html='';
+  Object.values(cart).forEach(entry=>{
+    const c=entry.campaign;
+    const sup=SUPPLIERS.find(s=>String(s.id)===String(c.supplierId));
+    const itemTotal=entry.items.reduce((s,i)=>s+i.qty*i.price,0);
+    const totalQty=entry.items.reduce((s,i)=>s+i.qty,0);
+    const disc=calcCartItemDiscount(itemTotal,totalQty,c,entry.promoResult);
+    const discounted=Math.max(0,itemTotal-disc);
+
+    html+=`<div class="cart-supplier-section">
+      <div class="cart-sup-hd">
+        <span style="font-size:18px">${sup?.name||'廠商'}</span>
+        <span class="cart-sup-camp">${c.name}</span>
+        <button onclick="removeFromCart('${c.id}')" style="margin-left:auto;background:none;border:none;color:#ccc;font-size:18px;cursor:pointer;touch-action:manipulation">🗑</button>
+      </div>
+      ${entry.items.map(i=>`<div class="cart-item-row">
+        <div style="flex:1"><div class="cart-item-name">${i.name}</div><div class="cart-item-spec">× ${i.qty} 份</div></div>
+        <div class="cart-item-price">$${(i.qty*i.price).toLocaleString()}</div>
+      </div>`).join('')}
+      <div class="cart-promo-row">
+        <input type="text" class="cart-promo-input" id="promo-${c.id}" value="${entry.promoCode}" placeholder="優惠碼（選填）"
+          oninput="cart['${c.id}'].promoCode=this.value.toUpperCase();this.value=this.value.toUpperCase()">
+        <button class="cart-promo-btn" onclick="applyCartPromo('${c.id}')">套用</button>
+      </div>
+      ${entry.promoResult?`<div class="cart-promo-result" style="color:${entry.promoResult.error?'var(--red)':'#2e7d32'}">${entry.promoResult.error||'✅ '+entry.promoResult.label+(disc>0?' · 省 $'+disc:'')}</div>`:''}
+      <div class="cart-subtotal">
+        <div class="cart-subtotal-label">${c.name} 小計</div>
+        <div class="cart-subtotal-amount">$${discounted.toLocaleString()}</div>
+      </div>
+    </div>`;
+  });
+  container.innerHTML=html;
+  updateCartSummary();
+}
+
+function calcCartItemDiscount(subtotal, totalQty, campaign, promoResult){
+  // Base campaign discount
+  const baseDisc=Math.round(subtotal*(1-(campaign.discount||100)/100));
+  if(!promoResult||promoResult.error)return baseDisc;
+  const type=promoResult.discountType;
+  let cfg={};
+  try{cfg=JSON.parse(promoResult.discountValue||'{}');}catch(e){}
+  if(type==='percent'){
+    const pct=parseFloat(cfg.value||100)/100;
+    return Math.round(subtotal*(1-pct));
+  }
+  if(type==='amount_per_unit'){
+    const perUnit=parseFloat(cfg.perUnit||cfg.value||0);
+    return baseDisc+Math.round(perUnit*totalQty);
+  }
+  if(type==='amount_threshold'){
+    const after=Math.round(subtotal*(campaign.discount||100)/100);
+    const threshold=parseFloat(cfg.threshold||0);
+    const off=parseFloat(cfg.off||0);
+    return baseDisc+(after>=threshold?off:0);
+  }
+  return baseDisc;
+}
+
+function calcCartItemTotal(entry){
+  const subtotal=entry.items.reduce((s,i)=>s+i.qty*i.price,0);
+  const totalQty=entry.items.reduce((s,i)=>s+i.qty,0);
+  const disc=calcCartItemDiscount(subtotal,totalQty,entry.campaign,entry.promoResult);
+  return Math.max(0,subtotal-disc);
+}
+
+function updateCartSummary(){
+  const summaryEl=document.getElementById('cart-summary');
+  if(!summaryEl)return;
+  const entries=Object.values(cart);
+  if(!entries.length)return;
+  const itemsTotal=entries.reduce((s,e)=>s+calcCartItemTotal(e),0);
+  const shippingFee=SHIPPING_OPTIONS[cartShipping]?.fee||0;
+  const grandTotal=itemsTotal+shippingFee;
+  const ship=SHIPPING_OPTIONS[cartShipping];
+  summaryEl.innerHTML=`
+    <div class="cart-summary-row"><span>商品小計</span><span>$${itemsTotal.toLocaleString()}</span></div>
+    <div class="cart-summary-row"><span>${ship?.icon} ${ship?.label}</span><span>${shippingFee>0?'$'+shippingFee:'免費'}</span></div>
+    <div class="cart-summary-row"><span>付款方式</span><span>${cartPayment==='cash'?'💵 現金':'🏦 匯款'}</span></div>
+    <div class="cart-summary-row"><span>合計</span><span style="color:var(--red)">$${grandTotal.toLocaleString()}</span></div>`;
+}
+
+function removeFromCart(campaignId){
+  delete cart[campaignId];
+  updateCartBadge();
+  renderCartPage();
+}
+
+async function applyCartPromo(campaignId){
+  const entry=cart[campaignId];if(!entry)return;
+  const code=entry.promoCode.trim().toUpperCase();
+  if(!code){entry.promoResult=null;renderCartPage();return;}
+  try{
+    const res=await fetch(GAS_URL+'?action=validatePromoCode&code='+encodeURIComponent(code)+'&campaignId='+encodeURIComponent(campaignId));
+    const data=await res.json();
+    if(data.status!=='ok'){entry.promoResult={error:data.message||'無效優惠碼'};}
+    else{entry.promoResult={...data,discountType:data.discountType,discountValue:data.discountValue,label:data.label||data.message};}
+  }catch(e){entry.promoResult={error:'驗證失敗，請稍後再試'};}
+  renderCartPage();
+}
+
+async function submitCart(){
+  const name=document.getElementById('cart-name')?.value.trim();
+  const phone=document.getElementById('cart-phone')?.value.trim();
+  const address=document.getElementById('cart-address')?.value.trim();
+  const errEl=document.getElementById('cart-submit-error');
+  const btn=document.getElementById('cart-submit-btn');
+
+  if(!name){errEl.textContent='請填寫姓名';errEl.style.display='block';return;}
+  if(!/^09\d{8}$/.test(phone)){errEl.textContent='請填寫正確手機號碼';errEl.style.display='block';return;}
+  if((cartShipping==='711'||cartShipping==='blackcat')&&!address){errEl.textContent='請填寫收件地址';errEl.style.display='block';return;}
+  if(cartPayment==='cash'&&cartShipping!=='pickup'){errEl.textContent='現金付款僅限自取';errEl.style.display='block';return;}
+  errEl.style.display='none';
+
+  const entries=Object.values(cart);
+  if(!entries.length){errEl.textContent='購物車是空的';errEl.style.display='block';return;}
+
+  const shippingFee=SHIPPING_OPTIONS[cartShipping]?.fee||0;
+  const shipLabel=SHIPPING_OPTIONS[cartShipping]?.label||'自取';
+
+  btn.disabled=true;btn.textContent='送出中…';
+
+  let allSuccess=true;
+  const orderIds=[];
+  const failedCamps=[];
+
+  for(const entry of entries){
+    const c=entry.campaign;
+    const subtotal=entry.items.reduce((s,i)=>s+i.qty*i.price,0);
+    const totalQty=entry.items.reduce((s,i)=>s+i.qty,0);
+    const disc=calcCartItemDiscount(subtotal,totalQty,c,entry.promoResult);
+    const discounted=Math.max(0,subtotal-disc);
+    const promoCode=entry.promoResult&&!entry.promoResult.error?entry.promoResult.code||'':'';
+    const promoDiscount=disc-(Math.round(subtotal*(1-(c.discount||100)/100)));
+
+    try{
+      const res=await fetch(GAS_URL,{
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({
+          action:'submitOrder',
+          name,phone,
+          campaignId:c.id,
+          campaignName:c.name,
+          items:entry.items,
+          total:subtotal,
+          discounted:discounted+shippingFee/entries.length, // split shipping fee proportionally
+          promoCode,
+          promoDiscount:Math.max(0,promoDiscount),
+          shippingMethod:shipLabel,
+          shippingFee:entries.length===1?shippingFee:0, // only record on first order if split
+          paymentMethod:cartPayment==='cash'?'現金':'匯款',
+          address,
+        })
+      });
+      const data=await res.json();
+      if(data.status==='ok'){orderIds.push(data.orderId);}
+      else{allSuccess=false;failedCamps.push(c.name+': '+data.message);}
+    }catch(e){allSuccess=false;failedCamps.push(c.name+': 連線失敗');}
+  }
+
+  btn.disabled=false;btn.textContent='確認送出訂單';
+
+  if(allSuccess){
+    // Show success
+    cart={};updateCartBadge();
+    closeCartPage();
+    showCartSuccess(name,phone,orderIds,shipLabel,shippingFee);
+  } else {
+    errEl.textContent='部分訂單失敗：'+failedCamps.join('、');
+    errEl.style.display='block';
+  }
+}
+
+function showCartSuccess(name,phone,orderIds,shipLabel,shippingFee){
+  // Use existing success wrap
+  document.getElementById('success-detail').innerHTML=
+    `<strong>訂購人：</strong>${name}<br><strong>手機：</strong>${phone}<br>`+
+    `<strong>取貨方式：</strong>${shipLabel}${shippingFee>0?' (運費 $'+shippingFee+')':''}<br>`+
+    `<strong>訂單編號：</strong>${orderIds.join('、')}`;
+  document.getElementById('success-wrap').classList.add('show');
+  document.body.style.overflow='hidden';
+}
+
 async function applyPromoCode(){
   const code=document.getElementById('f-promo').value.trim().toUpperCase();
   const resultEl=document.getElementById('promo-result');
@@ -835,7 +1271,7 @@ async function init(){
     }catch(e){ console.warn('GAS 載入失敗，使用靜態資料', e); }
   }
 
-  buildSupTabs();
+  buildSupTabs();updateCartBadge();
   const urlCid = new URLSearchParams(location.search).get('cid');
   if(urlCid){
     const c = CAMPAIGNS.find(x=>String(x.id)===String(urlCid));
@@ -860,7 +1296,7 @@ function buildSupTabs(){
   const visible = SUPPLIERS.filter(s=>CAMPAIGNS.some(c=>String(c.supplierId)===String(s.id)));
   document.getElementById('sup-tabs').innerHTML =
     `<div class="sup-tab active" id="sup-tab-all" onclick="selectSupplier(null,this)">全部</div>` +
-    visible.map(s=>`<div class="sup-tab" id="sup-tab-${s.id}" onclick="selectSupplier(${s.id},this)">${s.name}</div>`).join('');
+    visible.map(s=>`<div class="sup-tab" id="sup-tab-${s.id}" onclick="selectSupplier('${s.id}',this)">${s.name}</div>`).join('');
 }
 function selectSupplier(sid,el){
   currentSupplierId = sid;
@@ -1019,20 +1455,14 @@ function campCardHtml(c, allActive){
       <div class="camp-preview">${preview}</div>
       ${progressHtml}
     </div>
-    ${isActive?`<button class="camp-cta" onclick="event.stopPropagation();openCampaign('${c.id}')">立即訂購 →</button>`:`<button class="camp-cta closed">已結束</button>`}
+    ${isActive?`<div class="camp-cta-row">
+      <button class="camp-cta-main" onclick="event.stopPropagation();addToCart('${c.id}')">🛒 加入購物車</button>
+    </div>`:`<button class="camp-cta closed" style="width:100%;background:#f0f0f0;color:#aaa;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:700;font-family:'Noto Sans TC',sans-serif;margin-top:12px">已結束</button>`}
   </div>`;
 }
 
 // ── ORDER PAGE ──
-function openCampaign(id){
-  currentCampaign = CAMPAIGNS.find(c=>String(c.id)===String(id));
-  if(!currentCampaign||currentCampaign.status!=='active') return;
-  qty={};
-  document.getElementById('home-page').style.display='none';
-  document.getElementById('order-page').style.display='block';
-  document.getElementById('success-wrap').classList.remove('show');
-  buildOrderPage(); startCountdown(); window.scrollTo(0,0);
-}
+function openCampaign(id){ addToCart(id); }
 function goHome(){
   clearInterval(cdTimer);
   document.getElementById('home-page').style.display='block';
