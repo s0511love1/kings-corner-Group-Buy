@@ -115,7 +115,7 @@ function initSheets() {
   ensureSheet(SH.ORDERS,    ['id','campaignId','campaignName','supplierId','name','phone','items','itemCount','total','discounted','paid','ts']);
   ensureSheet(SH.ADS,       ['supplierId','slides']); // slides 存 JSON
   ensureSheet(SH.MARKETING,   ['key','value']);
-  ensureSheet(SH.PROMO_CODES, ['id','code','name','contact','discountType','discountValue','status','note','createdAt']);
+  ensureSheet(SH.PROMO_CODES, ['id','code','name','contact','discountType','discountValue','campaignRules','status','note','createdAt']);
   // Add promoCode + allowedCodes to orders/campaigns if not exists (handled dynamically)
 }
 
@@ -146,6 +146,10 @@ function doGet(e) {
     if (action === 'ping')         return ok({ message: "King's Corner API OK", time: ts() });
     if (action === 'queryOrder')      return queryOrder(e.parameter.phone);
     if (action === 'validatePromoCode') return validatePromoCode(e.parameter.code, e.parameter.campaignId);
+    if (action === 'validatePromoCodeMulti') {
+      const ids = JSON.parse(e.parameter.campaignIds || '[]');
+      return validatePromoCodeMulti(e.parameter.code, ids);
+    }
 
     // ── 登入（公開）──
     if (action === 'login') {
@@ -210,27 +214,39 @@ function doPost(e) {
     const token  = body.token  || '';
 
     // ── 登入（不需 token）──
-    if (action === 'login')       return login(body);
-    if (action === 'submitOrder') return submitOrder(body);
+    if (action === 'login')       return addCorsHeaders(login(body));
+    if (action === 'submitOrder') return addCorsHeaders(submitOrder(body));
 
     // ── 需要驗證的端點 ──
     const user = verifyToken(token);
-    if (!user) return err('未授權，請重新登入');
+    if (!user) return addCorsHeaders(err('未授權，請重新登入'));
 
-    if (action === 'saveCampaign')   return saveCampaign(body, user);
-    if (action === 'saveSupplier')   return saveSupplier(body, user);
-    if (action === 'saveProduct')    return saveProduct(body, user);
-    if (action === 'saveAds')        return saveAds(body, user);
-    if (action === 'saveMarketing')  return saveMarketing(body, user);
-    if (action === 'updatePaid')     return updatePaid(body, user);
-    if (action === 'saveAccount')    return saveAccount(body, user);
-    if (action === 'deleteRecord')   return deleteRecord(body, user);
-    if (action === 'importProducts') return importProducts(body, user);
+    if (action === 'saveCampaign')   return addCorsHeaders(saveCampaign(body, user));
+    if (action === 'saveSupplier')   return addCorsHeaders(saveSupplier(body, user));
+    if (action === 'saveProduct')    return addCorsHeaders(saveProduct(body, user));
+    if (action === 'saveAds')        return addCorsHeaders(saveAds(body, user));
+    if (action === 'saveMarketing')  return addCorsHeaders(saveMarketing(body, user));
+    if (action === 'updatePaid')     return addCorsHeaders(updatePaid(body, user));
+    if (action === 'saveAccount')    return addCorsHeaders(saveAccount(body, user));
+    if (action === 'deleteRecord')   return addCorsHeaders(deleteRecord(body, user));
+    if (action === 'importProducts') return addCorsHeaders(importProducts(body, user));
+    if (action === 'batchUpdatePaid') return addCorsHeaders(batchUpdatePaid(body, user));
+    if (action === 'savePromoCode')  return addCorsHeaders(savePromoCode(body, user));
+    if (action === 'deletePromoCode') return addCorsHeaders(deletePromoCode(body.id, user));
 
-    return err('未知的 action: ' + action);
+    return addCorsHeaders(err('未知的 action: ' + action));
   } catch(ex) {
-    return err('POST 錯誤: ' + ex.message);
+    return addCorsHeaders(err('POST 錯誤: ' + ex.message));
   }
+}
+
+function addCorsHeaders(output) {
+  return output;  // GAS handles CORS via deployment settings
+}
+
+function doOptions(e) {
+  return ContentService.createTextOutput('')
+    .setMimeType(ContentService.MimeType.TEXT);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -395,7 +411,12 @@ function submitOrder(body) {
   const promoCode    = body.promoCode    || '';
   const promoDiscount = parseFloat(body.promoDiscount) || 0;
 
-  const headers = ['id','campaignId','campaignName','supplierId','name','phone','items','itemCount','total','discounted','promoCode','promoDiscount','paid','ts'];
+  const shippingMethod = body.shippingMethod || '自取';
+  const shippingFee    = parseFloat(body.shippingFee) || 0;
+  const paymentMethod  = body.paymentMethod || '匯款';
+  const address        = body.address || '';
+
+  const headers = ['id','campaignId','campaignName','supplierId','name','phone','items','itemCount','total','discounted','promoCode','promoDiscount','shippingMethod','shippingFee','paymentMethod','address','paid','ts'];
   upsertRow(SH.ORDERS, headers, {
     id: orderId, campaignId, campaignName: campaignName || '',
     supplierId, name, phone,
@@ -403,6 +424,7 @@ function submitOrder(body) {
     itemCount, total: total || 0, discounted: discounted || 0,
     promoCode: promoCode || '自然流量',
     promoDiscount: promoDiscount || 0,
+    shippingMethod, shippingFee, paymentMethod, address,
     paid: 'false', ts: ts()
   }, 'id');
 
@@ -449,7 +471,10 @@ function getAllData(user) {
     accounts = sheetToObjects(SH.ACCOUNTS).map(a => ({ ...a, passHash: '***' }));
   }
 
-  const promoCodes = sheetToObjects(SH.PROMO_CODES);
+  const promoCodes = sheetToObjects(SH.PROMO_CODES).map(p => ({
+    ...p,
+    status: (p.status === true || String(p.status).toUpperCase() === 'TRUE') ? 'true' : 'false'
+  }));
 
   return ok({
     campaigns,
@@ -475,7 +500,8 @@ function getOrders(campaignId) {
 
 function saveCampaign(body, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
-  const c = body.campaign;
+  let c = body.campaign;
+  if (typeof c === 'string') try { c = JSON.parse(c); } catch(e) {}
   if (!c || !c.name) return err('團購名稱為必填');
   if (!c.id) c.id = 'C' + new Date().getTime();
   if (!c.createdAt) c.createdAt = ts();
@@ -487,7 +513,8 @@ function saveCampaign(body, user) {
 
 function saveSupplier(body, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
-  const s = body.supplier;
+  let s = body.supplier;
+  if (typeof s === 'string') try { s = JSON.parse(s); } catch(e) {}
   if (!s || !s.name) return err('廠商名稱為必填');
   if (!s.id) s.id = 'S' + new Date().getTime();
   if (!s.createdAt) s.createdAt = ts();
@@ -498,7 +525,8 @@ function saveSupplier(body, user) {
 
 function saveProduct(body, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
-  const p = body.product;
+  let p = body.product;
+  if (typeof p === 'string') try { p = JSON.parse(p); } catch(e) {}
   if (!p || !p.name) return err('商品名稱為必填');
   if (!p.id) p.id = 'P' + new Date().getTime();
   const headers = ['id','supplierId','name','cat','spec','price','img','active'];
@@ -508,8 +536,31 @@ function saveProduct(body, user) {
 
 function importProducts(body, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
-  const { products, mode } = body;
+  let { products, mode } = body;
+  // products may be array (from POST JSON) or string (from GET)
+  if (typeof products === 'string') {
+    try { products = JSON.parse(products); } catch(e) { return err('products 格式錯誤'); }
+  }
   if (!products || !products.length) return err('沒有可匯入的商品');
+
+  // Auto-create missing suppliers
+  const supHeaders = ['id','name','cat','contact','note','createdAt'];
+  products.forEach(p => {
+    if (p.supplierId && String(p.supplierId).startsWith('__new__')) {
+      const supName = p.supplierName || p.supplierId.replace('__new__','');
+      const existing = sheetToObjects(SH.SUPPLIERS);
+      const found = existing.find(s => s.name === supName);
+      if (found) {
+        p.supplierId = String(found.id);
+      } else {
+        const newId = 'S' + new Date().getTime() + Math.random().toString(36).slice(2,5);
+        upsertRow(SH.SUPPLIERS, supHeaders, {
+          id: newId, name: supName, cat: '', contact: '', note: '', createdAt: ts()
+        }, 'id');
+        p.supplierId = newId;
+      }
+    }
+  });
 
   const headers = ['id','supplierId','name','cat','spec','price','img','active'];
   const sheet = ensureSheet(SH.PRODUCTS, headers);
@@ -548,7 +599,9 @@ function importProducts(body, user) {
 
 function saveAds(body, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
-  const { supplierId, slides } = body;
+  const supplierId = body.supplierId;
+  let slides = body.slides;
+  if (typeof slides === 'string') try { slides = JSON.parse(slides); } catch(e) { slides = []; }
   const sheet = ensureSheet(SH.ADS, ['supplierId','slides']);
   const data = sheet.getDataRange().getValues();
   const sidCol = 0;
@@ -564,7 +617,8 @@ function saveAds(body, user) {
 
 function saveMarketing(body, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
-  const { settings } = body;
+  let settings = body.settings;
+  if (typeof settings === 'string') try { settings = JSON.parse(settings); } catch(e) { settings = {}; }
   const sheet = ensureSheet(SH.MARKETING, ['key','value']);
   Object.entries(settings).forEach(([key, value]) => {
     const valStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
@@ -600,7 +654,8 @@ function updatePaid(body, user) {
 
 function saveAccount(body, user) {
   if (user.role !== 'root') return err('只有 ROOT 可以管理帳號');
-  const acc = body.account;
+  let acc = body.account;
+  if (typeof acc === 'string') try { acc = JSON.parse(acc); } catch(e) {}
   if (!acc) return err('缺少帳號資料');
   const headers = ['id','user','passHash','name','role','active','createdAt'];
 
@@ -816,30 +871,114 @@ function testAutoClose() {
 function validatePromoCode(code, campaignId) {
   if (!code || !code.trim()) return err('請輸入優惠碼');
   const codes = sheetToObjects(SH.PROMO_CODES);
-  const promo = codes.find(c => c.code.toUpperCase() === code.trim().toUpperCase() && c.status === 'true');
+  const promo = codes.find(c =>
+    c.code.toUpperCase() === code.trim().toUpperCase() &&
+    (c.status === 'true' || c.status === true || String(c.status).toUpperCase() === 'TRUE')
+  );
   if (!promo) return err('優惠碼無效或已停用');
 
-  // Check if this code is allowed for this campaign (whitelist)
+  // Parse per-campaign rules
+  let campaignRules = [];
+  try { campaignRules = JSON.parse(promo.campaignRules || '[]'); } catch(e) {}
+
+  // Find rule for this specific campaign
+  let rule = null;
+  if (campaignId) {
+    rule = campaignRules.find(r => String(r.campaignId) === String(campaignId));
+  }
+
+  // If no specific rule found, use default rule (first rule with campaignId='*') or 'none'
+  if (!rule) {
+    const defaultRule = campaignRules.find(r => r.campaignId === '*');
+    rule = defaultRule || { campaignId: '*', discountType: 'none', discountValue: '{}' };
+  }
+
+  // Check whitelist: campaign must have this code in allowedCodes
   if (campaignId) {
     const campaigns = sheetToObjects(SH.CAMPAIGNS);
     const camp = campaigns.find(c => String(c.id) === String(campaignId));
     if (camp) {
       let allowedCodes = [];
       try { allowedCodes = JSON.parse(camp.allowedCodes || '[]'); } catch(e) {}
-      if (allowedCodes.length > 0 && !allowedCodes.includes(promo.code)) {
-        return err('此優惠碼不適用本次團購');
+      if (allowedCodes.length > 0 && !allowedCodes.map(c=>c.toUpperCase()).includes(promo.code.toUpperCase())) {
+        // Not in whitelist → use default behavior (not allowed)
+        if (rule.discountType !== 'none') {
+          return err('此優惠碼不適用本次團購');
+        }
       }
     }
   }
+
+  // Build discount config
+  let discountValue = rule.discountValue || '{}';
+  if (typeof discountValue === 'string' && !discountValue.startsWith('{')) {
+    discountValue = JSON.stringify({ value: discountValue });
+  }
+
+  // Build human-readable label
+  let cfg = {};
+  try { cfg = JSON.parse(typeof discountValue === 'string' ? discountValue : JSON.stringify(discountValue)); } catch(e) {}
+  let label = '純追蹤';
+  if (rule.discountType === 'percent') label = `${cfg.value || '?'}折`;
+  else if (rule.discountType === 'amount_per_unit') label = `每份折 $${cfg.perUnit || cfg.value || '?'}`;
+  else if (rule.discountType === 'amount_threshold') label = `滿$${cfg.threshold || '?'}折$${cfg.off || '?'}`;
 
   return ok({
     valid: true,
     code: promo.code,
     name: promo.name,
-    discountType: promo.discountType,
-    discountValue: parseFloat(promo.discountValue) || 0,
-    message: `優惠碼有效：${promo.name} ${promo.discountType === 'fixed' ? promo.discountValue + '折' : ''}`,
+    discountType: rule.discountType,
+    discountValue: discountValue,
+    label,
+    message: `✅ ${promo.name}・${label}`,
   });
+}
+
+// Validate promo code for multiple campaigns at once (for cart)
+function validatePromoCodeMulti(code, campaignIds) {
+  if (!code || !code.trim()) return err('請輸入優惠碼');
+  const codes = sheetToObjects(SH.PROMO_CODES);
+  const promo = codes.find(c =>
+    c.code.toUpperCase() === code.trim().toUpperCase() &&
+    (c.status === 'true' || c.status === true || String(c.status).toUpperCase() === 'TRUE')
+  );
+  if (!promo) return err('優惠碼無效或已停用');
+
+  let campaignRules = [];
+  try { campaignRules = JSON.parse(promo.campaignRules || '[]'); } catch(e) {}
+
+  const campaigns = sheetToObjects(SH.CAMPAIGNS);
+  const results = {};
+
+  campaignIds.forEach(campaignId => {
+    let rule = campaignRules.find(r => String(r.campaignId) === String(campaignId));
+    if (!rule) {
+      const defaultRule = campaignRules.find(r => r.campaignId === '*');
+      rule = defaultRule || { campaignId: '*', discountType: 'none', discountValue: '{}' };
+    }
+
+    // Check whitelist
+    const camp = campaigns.find(c => String(c.id) === String(campaignId));
+    if (camp) {
+      let allowedCodes = [];
+      try { allowedCodes = JSON.parse(camp.allowedCodes || '[]'); } catch(e) {}
+      if (allowedCodes.length > 0 && !allowedCodes.map(c=>c.toUpperCase()).includes(promo.code.toUpperCase())) {
+        results[campaignId] = { discountType: 'none', discountValue: '{}', label: '此團購不適用' };
+        return;
+      }
+    }
+
+    let cfg = {};
+    try { cfg = JSON.parse(typeof rule.discountValue === 'string' ? rule.discountValue : JSON.stringify(rule.discountValue || '{}')); } catch(e) {}
+    let label = '純追蹤';
+    if (rule.discountType === 'percent') label = `${cfg.value || '?'}折`;
+    else if (rule.discountType === 'amount_per_unit') label = `每份折 $${cfg.perUnit || cfg.value || '?'}`;
+    else if (rule.discountType === 'amount_threshold') label = `滿$${cfg.threshold || '?'}折$${cfg.off || '?'}`;
+
+    results[campaignId] = { discountType: rule.discountType, discountValue: rule.discountValue, label };
+  });
+
+  return ok({ valid: true, code: promo.code, name: promo.name, results });
 }
 
 // ════════════════════════════════════════════════════════════
@@ -847,11 +986,21 @@ function validatePromoCode(code, campaignId) {
 // ════════════════════════════════════════════════════════════
 function savePromoCode(body, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
-  const p = body.promoCode;
+  let p = body.promoCode;
+  if (typeof p === 'string') try { p = JSON.parse(p); } catch(e) {}
   if (!p || !p.code || !p.name) return err('優惠碼和名稱為必填');
+
+  const existing = sheetToObjects(SH.PROMO_CODES);
+
+  // Duplicate check: same code but different id = reject
+  const dup = existing.find(e =>
+    e.code.toUpperCase() === p.code.toUpperCase() && String(e.id) !== String(p.id)
+  );
+  if (dup) return err(`優惠碼「${p.code}」已存在（${dup.name}），請使用不同的代碼`);
+
   if (!p.id) p.id = 'PC' + new Date().getTime();
   if (!p.createdAt) p.createdAt = ts();
-  const headers = ['id','code','name','contact','discountType','discountValue','status','note','createdAt'];
+  const headers = ['id','code','name','contact','discountType','discountValue','campaignRules','status','note','createdAt'];
   upsertRow(SH.PROMO_CODES, headers, p, 'id');
   return ok({ id: p.id });
 }
