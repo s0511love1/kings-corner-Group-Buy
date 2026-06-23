@@ -456,6 +456,22 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
     <div style="flex:1"></div>
     <button onclick="clearCart()" style="background:none;border:none;font-size:12px;color:#aaa;cursor:pointer;font-family:'Noto Sans TC',sans-serif">清空</button>
   </div>
+  <!-- Single promo code input for all campaigns -->
+  <div style="padding:12px 16px;background:#fffdf5;border-bottom:2px solid #e8e4e0;display:flex;gap:8px;align-items:center">
+    <div style="flex:1">
+      <div style="font-size:11px;color:#888;font-weight:700;margin-bottom:5px">🎟️ 優惠碼</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="cart-global-promo" class="cart-promo-input"
+          placeholder="輸入優惠碼（選填）"
+          style="flex:1;font-size:15px"
+          oninput="this.value=this.value.toUpperCase()"
+          onkeydown="if(event.key==='Enter')applyGlobalPromo()">
+        <button class="cart-promo-btn" onclick="applyGlobalPromo()" id="global-promo-btn">套用</button>
+        <button id="global-promo-clear" onclick="clearGlobalPromo()" style="display:none;background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;padding:0 4px;touch-action:manipulation">×</button>
+      </div>
+      <div id="global-promo-result" style="font-size:12px;margin-top:5px;display:none"></div>
+    </div>
+  </div>
   <div id="cart-items-container"></div>
   <!-- Checkout section -->
   <div class="cart-checkout-section" id="cart-checkout-section" style="display:none">
@@ -472,12 +488,12 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
       </button>
     </div>
     <div class="cart-section-title">付款方式</div>
-    <div class="cart-option-row">
+    <div class="cart-option-row" id="pay-option-row">
       <button class="cart-option-btn" id="pay-btn-transfer" onclick="selectPayment('transfer')">
         🏦 匯款
       </button>
-      <button class="cart-option-btn selected" id="pay-btn-cash" onclick="selectPayment('cash')" style="display:none">
-        💵 現金（限自取）
+      <button class="cart-option-btn" id="pay-btn-cash" onclick="selectPayment('cash')">
+        💵 現金<div class="opt-sub">限自取</div>
       </button>
     </div>
     <div class="cart-section-title">收件資料</div>
@@ -822,16 +838,44 @@ function addCurrentToCart(){
     const q=qty[p.id]||0;
     if(q>0)items.push({id:p.id,name:p.name,qty:q,price:p.price});
   });
-  if(!items.length){alert('請選擇至少一項商品');return;}
+  if(!items.length){showOrderToast('請先選擇至少一項商品','error');return;}
+  // Carry over promoCode from order page if applied
+  const existingPromo=cart[currentCampaign.id]?.promoResult||null;
+  const existingCode=cart[currentCampaign.id]?.promoCode||'';
   cart[currentCampaign.id]={
     campaign:{...currentCampaign},
     items,
-    promoCode:'',
-    promoResult:null,
+    promoCode: appliedPromo?.code||existingCode||'',
+    promoResult: appliedPromo&&!appliedPromo.error ? appliedPromo : existingPromo,
   };
   updateCartBadge();
   closeOrderPage();
-  openCartPage();
+  showAddedToCartPopup(currentCampaign.name);
+}
+
+function showAddedToCartPopup(campName){
+  // Show toast then go home
+  let toast=document.getElementById('cart-added-toast');
+  if(!toast){
+    toast=document.createElement('div');
+    toast.id='cart-added-toast';
+    toast.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#5dca8a;font-size:14px;font-weight:700;padding:12px 24px;border-radius:30px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);font-family:"Noto Sans TC",sans-serif;white-space:nowrap;transition:opacity 0.3s';
+    document.body.appendChild(toast);
+  }
+  toast.textContent='✅ 已加入購物車！';
+  toast.style.opacity='1';
+  toast.style.display='block';
+  setTimeout(()=>{toast.style.opacity='0';setTimeout(()=>{toast.style.display='none';},300);},1800);
+  goHome();
+}
+
+function showOrderToast(msg,type='info'){
+  let t=document.getElementById('order-toast');
+  if(!t){t=document.createElement('div');t.id='order-toast';t.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);font-size:14px;font-weight:700;padding:12px 24px;border-radius:30px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);font-family:"Noto Sans TC",sans-serif;white-space:nowrap;transition:opacity 0.3s';document.body.appendChild(t);}
+  t.style.background=type==='error'?'#9b1b20':'#1a1a1a';
+  t.style.color=type==='error'?'#fff':'#5dca8a';
+  t.textContent=msg;t.style.opacity='1';t.style.display='block';
+  setTimeout(()=>{t.style.opacity='0';setTimeout(()=>{t.style.display='none';},300);},2000);
 }
 
 function closeOrderPage(){
@@ -845,10 +889,28 @@ function openCartPage(){
   document.getElementById('cart-page').style.display='block';
   document.body.style.overflow='hidden';
   window.scrollTo(0,0);
+  // Restore promo code display if already applied
+  const existingCode=Object.values(cart).find(e=>e.promoCode)?.promoCode||'';
+  const inputEl=document.getElementById('cart-global-promo');
+  const clearBtn=document.getElementById('global-promo-clear');
+  const resultEl=document.getElementById('global-promo-result');
+  if(existingCode&&inputEl){
+    inputEl.value=existingCode;
+    if(clearBtn)clearBtn.style.display='block';
+    const appliedCount=Object.values(cart).filter(e=>e.promoResult&&!e.promoResult.error).length;
+    if(resultEl&&appliedCount>0){
+      resultEl.textContent=`✅ 已套用 ${appliedCount} 個團購的折扣`;
+      resultEl.style.color='#2e7d32';
+      resultEl.style.display='block';
+    }
+  }
 }
 function closeCartPage(){
   document.getElementById('cart-page').style.display='none';
   document.body.style.overflow='';
+  // Ensure home-page is visible
+  const hp=document.getElementById('home-page');
+  if(hp)hp.style.display='block';
 }
 function clearCart(){
   if(!confirm('確定清空購物車？'))return;
@@ -863,14 +925,19 @@ function selectShipping(type){
     const btn=document.getElementById('ship-btn-'+t);
     if(btn)btn.classList.toggle('selected',t===type);
   });
-  // Cash only available for pickup
+  // Cash only available for pickup — show/hide cash button
   const cashBtn=document.getElementById('pay-btn-cash');
-  if(cashBtn)cashBtn.style.display=type==='pickup'?'block':'none';
+  if(cashBtn)cashBtn.style.display=(type==='pickup')?'':'none';
+  // If not pickup and cash was selected, force to transfer
   if(type!=='pickup'&&cartPayment==='cash'){
     cartPayment='transfer';
-    selectPayment('transfer');
   }
-  // Show address for delivery options
+  // Always update payment button states
+  ['transfer','cash'].forEach(t=>{
+    const btn=document.getElementById('pay-btn-'+t);
+    if(btn)btn.classList.toggle('selected',t===cartPayment);
+  });
+  // Show address for delivery
   const addrRow=document.getElementById('cart-address-row');
   if(addrRow)addrRow.style.display=(type==='711'||type==='blackcat')?'block':'none';
   updateCartSummary();
@@ -881,9 +948,8 @@ function selectPayment(type){
     const btn=document.getElementById('pay-btn-'+t);
     if(btn)btn.classList.toggle('selected',t===type);
   });
-  // Show cash button only for pickup
   const cashBtn=document.getElementById('pay-btn-cash');
-  if(cashBtn)cashBtn.style.display=cartShipping==='pickup'?'block':'none';
+  if(cashBtn)cashBtn.style.display=cartShipping==='pickup'?'':'none';
 }
 
 function renderCartPage(){
@@ -903,6 +969,9 @@ function renderCartPage(){
   if(emptyEl)emptyEl.style.display='none';
   if(checkoutEl)checkoutEl.style.display='block';
 
+  // Build notes for confirm checkbox
+  const allNotes=Object.values(cart).map(e=>e.campaign.note).filter(Boolean);
+
   let html='';
   Object.values(cart).forEach(entry=>{
     const c=entry.campaign;
@@ -911,31 +980,80 @@ function renderCartPage(){
     const totalQty=entry.items.reduce((s,i)=>s+i.qty,0);
     const disc=calcCartItemDiscount(itemTotal,totalQty,c,entry.promoResult);
     const discounted=Math.max(0,itemTotal-disc);
+    const baseSaving=Math.round(itemTotal*(1-(c.discount||100)/100));
+    const promoSaving=disc-baseSaving;
+    const hasPromo=entry.promoResult&&!entry.promoResult.error;
 
     html+=`<div class="cart-supplier-section">
       <div class="cart-sup-hd">
-        <span style="font-size:18px">${sup?.name||'廠商'}</span>
+        <span style="font-weight:700;color:var(--dark)">${sup?.name||'廠商'}</span>
         <span class="cart-sup-camp">${c.name}</span>
-        <button onclick="removeFromCart('${c.id}')" style="margin-left:auto;background:none;border:none;color:#ccc;font-size:18px;cursor:pointer;touch-action:manipulation">🗑</button>
+        <button onclick="removeFromCart('${c.id}')" style="margin-left:auto;background:none;border:none;color:#ccc;font-size:20px;cursor:pointer;touch-action:manipulation;line-height:1" title="移除此團購">×</button>
       </div>
       ${entry.items.map(i=>`<div class="cart-item-row">
-        <div style="flex:1"><div class="cart-item-name">${i.name}</div><div class="cart-item-spec">× ${i.qty} 份</div></div>
+        <div style="flex:1"><div class="cart-item-name">${i.name}</div><div class="cart-item-spec">× ${i.qty} 份 · $${i.price}/份</div></div>
         <div class="cart-item-price">$${(i.qty*i.price).toLocaleString()}</div>
       </div>`).join('')}
-      <div class="cart-promo-row">
-        <input type="text" class="cart-promo-input" id="promo-${c.id}" value="${entry.promoCode}" placeholder="優惠碼（選填）"
-          oninput="cart['${c.id}'].promoCode=this.value.toUpperCase();this.value=this.value.toUpperCase()">
-        <button class="cart-promo-btn" onclick="applyCartPromo('${c.id}')">套用</button>
-      </div>
-      ${entry.promoResult?`<div class="cart-promo-result" style="color:${entry.promoResult.error?'var(--red)':'#2e7d32'}">${entry.promoResult.error||'✅ '+entry.promoResult.label+(disc>0?' · 省 $'+disc:'')}</div>`:''}
+      <!-- Promo result for this campaign (read-only, applied globally) -->
+      ${hasPromo
+        ?`<div class="cart-promo-result" style="color:#2e7d32;padding:8px 16px;background:#f0faf3;border-top:1px solid #d4edda">
+            🎟️ ${entry.promoResult.name}・${entry.promoResult.label}${promoSaving>0?' · 省 $'+promoSaving:''}</div>`
+        :(entry.promoResult?.error
+          ?`<div class="cart-promo-result" style="color:var(--red);padding:8px 16px;background:#fff5f5;border-top:1px solid #ffd6d6">❌ ${entry.promoResult.error}</div>`
+          :'')}
+      ${baseSaving>0?`<div style="padding:4px 16px 6px;font-size:11px;color:#aaa">原價 $${itemTotal} → 團購價 $${Math.round(itemTotal*(c.discount||100)/100)}${disc>baseSaving?' → 優惠碼 $'+discounted:''}</div>`:''}
       <div class="cart-subtotal">
         <div class="cart-subtotal-label">${c.name} 小計</div>
         <div class="cart-subtotal-amount">$${discounted.toLocaleString()}</div>
       </div>
     </div>`;
   });
+
+  // Append merged notes confirm block if any notes exist
+  const noteEntries=Object.values(cart).filter(e=>e.campaign.note);
+  if(noteEntries.length){
+    const mergedNotesHtml=noteEntries.map(e=>{
+      const sup=SUPPLIERS.find(s=>String(s.id)===String(e.campaign.supplierId));
+      const label=`${sup?.name||''}・${e.campaign.name}`;
+      return `<div style="margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:#c9a84c;letter-spacing:0.5px;margin-bottom:4px">${label}</div>
+        <div style="font-size:13px;color:#333;line-height:1.7;white-space:pre-wrap">${e.campaign.note}</div>
+      </div>`;
+    }).join('');
+    html+=`<div style="padding:14px 16px;border-top:2px solid #e8e4e0;border-bottom:2px solid #e8e4e0;background:#fdf9f0;margin-bottom:0">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">
+        <span style="font-size:16px">📋</span>
+        <span style="font-size:13px;font-weight:700;color:#333">備註 / 付款說明</span>
+      </div>
+      <div style="background:#fff;border:2px solid #e8c84c;border-radius:10px;padding:12px 14px">
+        ${mergedNotesHtml}
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-top:12px;cursor:pointer">
+        <input type="checkbox" id="notes-confirm-cb" style="width:20px;height:20px;cursor:pointer;accent-color:var(--dark);flex-shrink:0;margin-top:1px" onchange="updateCartSubmitBtn()">
+        <span style="font-size:13px;color:#333;font-weight:600;line-height:1.5">我已閱讀並了解以上備註 / 付款說明</span>
+      </label>
+    </div>`;
+  }
   container.innerHTML=html;
   updateCartSummary();
+  updateCartSubmitBtn();
+  // Re-init shipping/payment button state after render
+  setTimeout(()=>{selectShipping(cartShipping);},10);
+}
+
+function updateCartSubmitBtn(){
+  const btn=document.getElementById('cart-submit-btn');
+  if(!btn)return;
+  const cb=document.getElementById('notes-confirm-cb');
+  // Check if any notes exist (need confirmation)
+  const hasNotes=Object.values(cart).some(e=>e.campaign.note);
+  const confirmed=!hasNotes||(cb&&cb.checked);
+  btn.disabled=!confirmed;
+  btn.style.opacity=confirmed?'1':'0.4';
+}
+
+function clearCartPromo(campaignId){
+  clearGlobalPromo();
 }
 
 function calcCartItemDiscount(subtotal, totalQty, campaign, promoResult){
@@ -974,15 +1092,59 @@ function updateCartSummary(){
   if(!summaryEl)return;
   const entries=Object.values(cart);
   if(!entries.length)return;
-  const itemsTotal=entries.reduce((s,e)=>s+calcCartItemTotal(e),0);
+
+  let rowsHtml='';
+  let itemsTotal=0;
+  let totalSaving=0;
+
+  entries.forEach(entry=>{
+    const c=entry.campaign;
+    const sup=SUPPLIERS.find(s=>String(s.id)===String(c.supplierId));
+    const subtotal=entry.items.reduce((s,i)=>s+i.qty*i.price,0);
+    const totalQty=entry.items.reduce((s,i)=>s+i.qty,0);
+    const disc=calcCartItemDiscount(subtotal,totalQty,c,entry.promoResult);
+    const discounted=Math.max(0,subtotal-disc);
+    itemsTotal+=discounted;
+    totalSaving+=disc;
+
+    // Supplier header
+    rowsHtml+=`<div style="font-size:11px;font-weight:700;color:#888;letter-spacing:0.5px;padding:8px 0 4px;border-top:1px solid #e8e4e0;margin-top:4px">${sup?.name||'廠商'} · ${c.name}</div>`;
+    // Each item
+    entry.items.forEach(i=>{
+      rowsHtml+=`<div class="cart-summary-row" style="font-size:13px;color:#666">
+        <span>${i.name} ×${i.qty}</span><span>$${(i.qty*i.price).toLocaleString()}</span>
+      </div>`;
+    });
+    // Always show subtotal, discount lines only if applicable
+    const baseSaving=Math.round(subtotal*(1-(c.discount||100)/100));
+    const promoSaving=disc-baseSaving;
+    if(baseSaving>0){
+      rowsHtml+=`<div class="cart-summary-row" style="font-size:12px;color:#2e7d32">
+        <span>🏷️ 團購折扣</span><span>-$${baseSaving}</span>
+      </div>`;
+    }
+    if(promoSaving>0&&entry.promoResult&&!entry.promoResult.error){
+      rowsHtml+=`<div class="cart-summary-row" style="font-size:12px;color:#2e7d32">
+        <span>🎟️ ${entry.promoResult.code||''} · ${entry.promoResult.label||''}</span><span>-$${promoSaving}</span>
+      </div>`;
+    }
+    rowsHtml+=`<div class="cart-summary-row" style="font-size:13px;font-weight:700;padding-top:4px;border-top:1px dashed #e8e4e0;margin-top:2px">
+      <span>${c.name} 小計</span><span>$${discounted.toLocaleString()}</span>
+    </div>`;
+  });
+
   const shippingFee=SHIPPING_OPTIONS[cartShipping]?.fee||0;
-  const grandTotal=itemsTotal+shippingFee;
   const ship=SHIPPING_OPTIONS[cartShipping];
+  const grandTotal=itemsTotal+shippingFee;
+
   summaryEl.innerHTML=`
-    <div class="cart-summary-row"><span>商品小計</span><span>$${itemsTotal.toLocaleString()}</span></div>
-    <div class="cart-summary-row"><span>${ship?.icon} ${ship?.label}</span><span>${shippingFee>0?'$'+shippingFee:'免費'}</span></div>
-    <div class="cart-summary-row"><span>付款方式</span><span>${cartPayment==='cash'?'💵 現金':'🏦 匯款'}</span></div>
-    <div class="cart-summary-row"><span>合計</span><span style="color:var(--red)">$${grandTotal.toLocaleString()}</span></div>`;
+    ${rowsHtml}
+    <div style="border-top:2px solid #e8e4e0;margin:8px 0 4px"></div>
+    ${totalSaving>0?`<div class="cart-summary-row" style="color:#2e7d32;font-size:13px"><span>✅ 合計省下</span><span>-$${totalSaving}</span></div>`:''}
+    <div class="cart-summary-row"><span>${ship?.icon||''} ${ship?.label||''}</span><span style="color:#888">${shippingFee>0?'$'+shippingFee:'免費'}</span></div>
+    <div class="cart-summary-row" style="font-size:15px;font-weight:700;padding-top:8px;border-top:1px solid #e8e4e0;margin-top:4px">
+      <span>合計</span><span style="color:var(--red)">$${grandTotal.toLocaleString()}</span>
+    </div>`;
 }
 
 function removeFromCart(campaignId){
@@ -991,17 +1153,87 @@ function removeFromCart(campaignId){
   renderCartPage();
 }
 
-async function applyCartPromo(campaignId){
-  const entry=cart[campaignId];if(!entry)return;
-  const code=entry.promoCode.trim().toUpperCase();
-  if(!code){entry.promoResult=null;renderCartPage();return;}
+async function applyGlobalPromo(){
+  const inputEl=document.getElementById('cart-global-promo');
+  const resultEl=document.getElementById('global-promo-result');
+  const clearBtn=document.getElementById('global-promo-clear');
+  const applyBtn=document.getElementById('global-promo-btn');
+  const code=(inputEl?.value||'').trim().toUpperCase();
+
+  // Clear all promo results first
+  Object.values(cart).forEach(e=>{e.promoCode='';e.promoResult=null;});
+
+  if(!code){
+    if(resultEl){resultEl.style.display='none';}
+    if(clearBtn)clearBtn.style.display='none';
+    renderCartPage();return;
+  }
+
+  if(applyBtn){applyBtn.textContent='驗證中…';applyBtn.disabled=true;}
+  if(resultEl){resultEl.textContent='驗證中…';resultEl.style.display='block';resultEl.style.color='#888';}
+
+  // Validate code for each campaign in cart
+  const campaignIds=Object.keys(cart);
+  let anySuccess=false;
+  let globalError='';
+
   try{
-    const res=await fetch(GAS_URL+'?action=validatePromoCode&code='+encodeURIComponent(code)+'&campaignId='+encodeURIComponent(campaignId));
+    const res=await fetch(GAS_URL+'?action=validatePromoCodeMulti&code='+encodeURIComponent(code)+'&campaignIds='+encodeURIComponent(JSON.stringify(campaignIds)));
     const data=await res.json();
-    if(data.status!=='ok'){entry.promoResult={error:data.message||'無效優惠碼'};}
-    else{entry.promoResult={...data,discountType:data.discountType,discountValue:data.discountValue,label:data.label||data.message};}
-  }catch(e){entry.promoResult={error:'驗證失敗，請稍後再試'};}
+    if(data.status!=='ok'){
+      globalError=data.message||'無效優惠碼';
+    } else {
+      // Apply per-campaign results
+      campaignIds.forEach(cid=>{
+        const r=data.results?.[cid];
+        cart[cid].promoCode=code;
+        if(r&&r.discountType!=='none'){
+          cart[cid].promoResult={
+            code:data.code,name:data.name,
+            discountType:r.discountType,
+            discountValue:r.discountValue,
+            label:r.label,
+          };
+          anySuccess=true;
+        } else {
+          // Code exists but no discount for this campaign
+          cart[cid].promoResult=null;
+        }
+      });
+    }
+  }catch(e){globalError='驗證失敗，請稍後再試';}
+
+  if(applyBtn){applyBtn.textContent='套用';applyBtn.disabled=false;}
+
+  if(globalError){
+    if(resultEl){resultEl.textContent='❌ '+globalError;resultEl.style.color='var(--red)';resultEl.style.display='block';}
+    if(clearBtn)clearBtn.style.display='none';
+    Object.values(cart).forEach(e=>{e.promoCode='';e.promoResult=null;});
+  } else {
+    const applyCount=Object.values(cart).filter(e=>e.promoResult&&!e.promoResult.error).length;
+    const msg=applyCount>0
+      ?`✅ 已套用 ${applyCount} 個團購的折扣`
+      :`ℹ️ 優惠碼有效，此批商品無對應折扣（純追蹤）`;
+    if(resultEl){resultEl.textContent=msg;resultEl.style.color=applyCount>0?'#2e7d32':'#888';resultEl.style.display='block';}
+    if(clearBtn)clearBtn.style.display='block';
+  }
   renderCartPage();
+}
+
+function clearGlobalPromo(){
+  const inputEl=document.getElementById('cart-global-promo');
+  const resultEl=document.getElementById('global-promo-result');
+  const clearBtn=document.getElementById('global-promo-clear');
+  if(inputEl)inputEl.value='';
+  if(resultEl)resultEl.style.display='none';
+  if(clearBtn)clearBtn.style.display='none';
+  Object.values(cart).forEach(e=>{e.promoCode='';e.promoResult=null;});
+  renderCartPage();
+}
+
+// Keep applyCartPromo for compatibility (no longer used in UI)
+async function applyCartPromo(campaignId){
+  await applyGlobalPromo();
 }
 
 async function submitCart(){
@@ -1011,10 +1243,14 @@ async function submitCart(){
   const errEl=document.getElementById('cart-submit-error');
   const btn=document.getElementById('cart-submit-btn');
 
-  if(!name){errEl.textContent='請填寫姓名';errEl.style.display='block';return;}
-  if(!/^09\d{8}$/.test(phone)){errEl.textContent='請填寫正確手機號碼';errEl.style.display='block';return;}
-  if((cartShipping==='711'||cartShipping==='blackcat')&&!address){errEl.textContent='請填寫收件地址';errEl.style.display='block';return;}
-  if(cartPayment==='cash'&&cartShipping!=='pickup'){errEl.textContent='現金付款僅限自取';errEl.style.display='block';return;}
+  if(!name){errEl.textContent='請填寫姓名';errEl.style.display='block';document.getElementById('cart-name')?.focus();return;}
+  if(!/^09\d{8}$/.test(phone)){errEl.textContent='請填寫正確手機號碼（09 開頭 10 位數）';errEl.style.display='block';document.getElementById('cart-phone')?.focus();return;}
+  if((cartShipping==='711'||cartShipping==='blackcat')&&!address){errEl.textContent='請填寫收件地址';errEl.style.display='block';document.getElementById('cart-address')?.focus();return;}
+  if(cartPayment==='cash'&&cartShipping!=='pickup'){errEl.textContent='現金付款僅限自取，請改選取貨方式';errEl.style.display='block';return;}
+  // Check notes confirmed
+  const cb=document.getElementById('notes-confirm-cb');
+  const hasNotes=Object.values(cart).some(e=>e.campaign.note);
+  if(hasNotes&&cb&&!cb.checked){errEl.textContent='請先勾選「已閱讀並了解備註說明」';errEl.style.display='block';return;}
   errEl.style.display='none';
 
   const entries=Object.values(cart);
@@ -1039,6 +1275,7 @@ async function submitCart(){
     const promoDiscount=disc-(Math.round(subtotal*(1-(c.discount||100)/100)));
 
     try{
+      const isFirstOrder=orderIds.length===0&&failedCamps.length===0;
       const res=await fetch(GAS_URL,{
         method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
@@ -1049,11 +1286,11 @@ async function submitCart(){
           campaignName:c.name,
           items:entry.items,
           total:subtotal,
-          discounted:discounted+shippingFee/entries.length, // split shipping fee proportionally
+          discounted,
           promoCode,
           promoDiscount:Math.max(0,promoDiscount),
           shippingMethod:shipLabel,
-          shippingFee:entries.length===1?shippingFee:0, // only record on first order if split
+          shippingFee:isFirstOrder?shippingFee:0, // shipping fee only on first order
           paymentMethod:cartPayment==='cash'?'現金':'匯款',
           address,
         })
@@ -1277,11 +1514,7 @@ async function init(){
     const c = CAMPAIGNS.find(x=>String(x.id)===String(urlCid));
     if(c && c.status==='active'){ openCampaign(c.id); return; }
   }
-  const firstActive = SUPPLIERS.find(s=>CAMPAIGNS.some(c=>String(c.supplierId)===String(s.id)&&c.status==='active')) || SUPPLIERS[0];
-  if(firstActive){
-    // Wait for tabs to render before selecting
-    setTimeout(()=>selectSupplier(firstActive.id), 50);
-  }
+  // Default to 全部 — do not auto-select any supplier
   buildMarquee();
   // Hide loading screen with fade
   setTimeout(()=>{
@@ -1293,10 +1526,12 @@ async function init(){
 
 // ── SUP TABS ──
 function buildSupTabs(){
-  const visible = SUPPLIERS.filter(s=>CAMPAIGNS.some(c=>String(c.supplierId)===String(s.id)));
+  const visible = SUPPLIERS.filter(s=>CAMPAIGNS.some(c=>String(c.supplierId)===String(s.id)&&c.status==='active'));
   document.getElementById('sup-tabs').innerHTML =
     `<div class="sup-tab active" id="sup-tab-all" onclick="selectSupplier(null,this)">全部</div>` +
     visible.map(s=>`<div class="sup-tab" id="sup-tab-${s.id}" onclick="selectSupplier('${s.id}',this)">${s.name}</div>`).join('');
+  // Ensure 全部 is selected by default
+  currentSupplierId=null;
 }
 function selectSupplier(sid,el){
   currentSupplierId = sid;
@@ -1471,11 +1706,14 @@ function goHome(){
   document.body.style.overflow='';
 }
 function buildOrderPage(){
-  // Auto-fill promo code from URL
+  // Auto-fill promo code from URL or carry from existing cart entry
   const urlCode=new URLSearchParams(location.search).get('code');
-  if(urlCode){
-    document.getElementById('f-promo').value=urlCode.toUpperCase();
-    setTimeout(applyPromoCode,500); // Apply after page renders
+  const existingCode=cart[currentCampaign?.id]?.promoCode||'';
+  const codeToUse=urlCode||existingCode;
+  if(codeToUse){
+    document.getElementById('f-promo').value=codeToUse.toUpperCase();
+    appliedPromo=cart[currentCampaign?.id]?.promoResult||null;
+    setTimeout(applyPromoCode,500);
   } else {
     appliedPromo=null;
     document.getElementById('f-promo').value='';

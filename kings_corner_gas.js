@@ -53,6 +53,7 @@ function ensureSheet(name, headers) {
   const spreadsheet = ss();
   let sheet = spreadsheet.getSheetByName(name);
   if (!sheet) {
+    // New sheet — write all headers
     sheet = spreadsheet.insertSheet(name);
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(1, 1, 1, headers.length)
@@ -60,6 +61,20 @@ function ensureSheet(name, headers) {
       .setBackground('#12100E')
       .setFontColor('#C9A84C');
     sheet.setFrozenRows(1);
+  } else {
+    // Existing sheet — add any missing columns
+    const existing = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    headers.forEach(h => {
+      if (!existing.includes(h)) {
+        const newCol = sheet.getLastColumn() + 1;
+        sheet.getRange(1, newCol).setValue(h);
+        sheet.getRange(1, newCol)
+          .setFontWeight('bold')
+          .setBackground('#12100E')
+          .setFontColor('#C9A84C');
+        existing.push(h);
+      }
+    });
   }
   return sheet;
 }

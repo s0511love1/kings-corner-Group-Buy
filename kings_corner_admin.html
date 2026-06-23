@@ -1762,12 +1762,25 @@ function renderPromoPage(){
     const isActive=p.status==='true'||p.status===true||String(p.status).toUpperCase()==='TRUE';
     let cfg={};
     try{const dv=p.discountValue;if(typeof dv==='string'&&dv.trim().startsWith('{'))cfg=JSON.parse(dv);else if(typeof dv==='object'&&dv!==null)cfg=dv;else cfg={value:dv};}catch(e){cfg={value:p.discountValue};}
-    const discHtml=(()=>{
-      if(p.discountType==='percent')return`<span style="color:var(--red);font-weight:700">${cfg.value||'?'}折</span>`;
-      if(p.discountType==='amount_per_unit')return`<span style="color:#5dca8a;font-weight:700">每份-$${cfg.perUnit||cfg.value||'?'}</span>`;
-      if(p.discountType==='amount_threshold')return`<span style="color:#6eb4ff;font-weight:700">滿$${cfg.threshold||'?'}折$${cfg.off||'?'}</span>`;
-      return'<span style="color:var(--faint)">純追蹤</span>';
-    })();
+    // Show rules summary
+    let rules=[];
+    try{rules=JSON.parse(p.campaignRules||'[]');}catch(e){}
+    const activeRules=rules.filter(r=>r.discountType&&r.discountType!=='none');
+    const discHtml=activeRules.length>0
+      ? activeRules.slice(0,2).map(r=>{
+          let rcfg={};try{rcfg=JSON.parse(r.discountValue||'{}');}catch(e){}
+          const campN=r.campaignId==='*'?'預設':(campaigns.find(c=>String(c.id)===String(r.campaignId))?.name||'').slice(0,5)||r.campaignId;
+          if(r.discountType==='percent')return`<span style="font-size:11px;color:var(--red)">${campN}:${rcfg.value||'?'}折</span>`;
+          if(r.discountType==='amount_per_unit')return`<span style="font-size:11px;color:#5dca8a">${campN}:每份-$${rcfg.perUnit||rcfg.value||'?'}</span>`;
+          if(r.discountType==='amount_threshold')return`<span style="font-size:11px;color:#6eb4ff">${campN}:滿$${rcfg.threshold||'?'}折$${rcfg.off||'?'}</span>`;
+          return'';
+        }).filter(Boolean).join('<br>')
+      : (() => {
+          if(p.discountType==='percent')return`<span style="color:var(--red);font-weight:700">${cfg.value||'?'}折</span>`;
+          if(p.discountType==='amount_per_unit')return`<span style="color:#5dca8a;font-weight:700">每份-$${cfg.perUnit||cfg.value||'?'}</span>`;
+          if(p.discountType==='amount_threshold')return`<span style="color:#6eb4ff;font-weight:700">滿$${cfg.threshold||'?'}折$${cfg.off||'?'}</span>`;
+          return'<span style="color:var(--faint)">純追蹤</span>';
+        })();
     return`<tr>
       <td><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;color:var(--gold)">${p.code}</span></td>
       <td style="font-weight:700">${p.name}</td>
@@ -1775,7 +1788,10 @@ function renderPromoPage(){
       <td>${discHtml}</td>
       <td>${isActive?'<span class="badge badge-active">啟用</span>':'<span class="badge badge-closed">停用</span>'}</td>
       <td style="font-size:11px;color:var(--muted)">${p.note||'—'}</td>
-      <td><button class="btn btn-outline btn-sm" onclick="openEditPromo('${p.id}')">編輯</button></td>
+      <td>
+        ${rules.length>0?`<div style="font-size:10px;color:var(--faint);margin-bottom:4px">${rules.length} 條規則</div>`:''}
+        <button class="btn btn-outline btn-sm" onclick="openEditPromo('${p.id}')">編輯</button>
+      </td>
     </tr>`;
   }).join('')+'</tbody></table>';
 }
@@ -1829,7 +1845,7 @@ function buildRuleHtml(rule, idx){
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
       ${rule.campaignId!=='*'?`<div style="flex:1;min-width:140px">
         <div style="font-size:10px;color:var(--muted);margin-bottom:4px">團購</div>
-        <select onchange="updateRule(${idx},'campaignId',this.value)" style="width:100%;background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none">
+        <select id="rule-camp-${idx}" onchange="updateRule(${idx},'campaignId',this.value)" style="width:100%;background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none">
           ${campaigns.filter(c=>c.status!=='closed').map(c=>`<option value="${c.id}" ${String(c.id)===String(rule.campaignId)?'selected':''}>${c.name}</option>`).join('')}
         </select>
       </div>`:''}
@@ -1851,10 +1867,20 @@ let editingRules = [];
 
 function renderRules(){
   document.getElementById('pc-rules-list').innerHTML = editingRules.map((r,i)=>buildRuleHtml(r,i)).join('');
+  // Sync actual select values (handles browser default selection)
+  editingRules.forEach((r,i)=>{
+    if(r.campaignId!=='*'){
+      const sel=document.getElementById('rule-camp-'+i);
+      if(sel&&sel.value)editingRules[i].campaignId=sel.value;
+    }
+  });
 }
 function addCampaignRule(){
-  const firstCamp = campaigns.find(c=>c.status!=='closed');
-  editingRules.push({campaignId: firstCamp?.id||'', discountType:'none', discountValue:'{}'});
+  const activeCamps=campaigns.filter(c=>c.status!=='closed');
+  // Avoid duplicating existing campaignIds
+  const usedIds=editingRules.map(r=>r.campaignId);
+  const freeCamp=activeCamps.find(c=>!usedIds.includes(String(c.id)))||activeCamps[0];
+  editingRules.push({campaignId: String(freeCamp?.id||''), discountType:'none', discountValue:'{}'});
   renderRules();
 }
 function removeCampaignRule(idx){editingRules.splice(idx,1);renderRules();}
@@ -1896,11 +1922,20 @@ async function savePromo(){
   if(!name){showToast('請輸入團購主名稱','error');return;}
   // Check duplicate code
   if(!editPromoId && promoCodes.find(p=>p.code.toUpperCase()===code.toUpperCase())){showToast(`優惠碼「${code}」已存在，請使用不同的代碼`,'error');return;}
+  // Build summary discountType/discountValue from first non-none rule for backward compat
+  // Sync campaignId from DOM selects before saving
+  editingRules.forEach((r,i)=>{
+    if(r.campaignId!=='*'){
+      const sel=document.getElementById('rule-camp-'+i);
+      if(sel&&sel.value)editingRules[i].campaignId=sel.value;
+    }
+  });
+  const firstRule=editingRules.find(r=>r.discountType&&r.discountType!=='none');
   const promoCode={
     id:editPromoId||'',code,name,
     contact:document.getElementById('pc-contact').value.trim(),
-    discountType:'none', // kept for compatibility, rules are in campaignRules
-    discountValue:'{}',
+    discountType:firstRule?.discountType||'none',
+    discountValue:firstRule?.discountValue||'{}',
     campaignRules:JSON.stringify(editingRules),
     status:document.getElementById('pc-status').value,
     note:document.getElementById('pc-note').value.trim(),
@@ -1917,7 +1952,10 @@ async function deletePromo(){
   loading(true,'刪除中…');
   try{
     await apiPost({action:'deletePromoCode',id:editPromoId});
-    closeModal('modal-promo');await loadData();showToast('已刪除');
+    closeModal('modal-promo');
+    await loadData();
+    renderPromoPage();
+    showToast('已刪除');
   }catch(e){showToast('刪除失敗','error');}finally{loading(false);}
 }
 
