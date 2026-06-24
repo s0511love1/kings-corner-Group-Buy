@@ -137,7 +137,7 @@ function initSheets() {
   // 其他工作表預建
   ensureSheet(SH.SUPPLIERS, ['id','name','cat','contact','note','createdAt']);
   ensureSheet(SH.PRODUCTS,  ['id','supplierId','name','cat','spec','price','img','active']);
-  ensureSheet(SH.CAMPAIGNS, ['id','name','supplierId','deadline','minPeople','discount','status','note','products','createdAt']);
+  ensureSheet(SH.CAMPAIGNS, ['id','name','supplierId','deadline','minPeople','discount','status','closedStatus','pickupDate','note','products','allowedCodes','createdAt']);
   ensureSheet(SH.ORDERS,    ['id','campaignId','campaignName','supplierId','name','phone','items','itemCount','total','discounted','paid','ts']);
   ensureSheet(SH.ADS,       ['supplierId','slides']); // slides 存 JSON
   ensureSheet(SH.MARKETING,   ['key','value']);
@@ -356,6 +356,13 @@ function getCampaignsPublic() {
   // Add real order counts and stock info per campaign
   const allOrders = sheetToObjects(SH.ORDERS);
 
+  // Also return closed campaigns for progress display
+  const closedCamps = campaigns.filter(c => c.status === 'closed');
+  closedCamps.forEach(c => {
+    const campOrders = allOrders.filter(o => String(o.campaignId) === String(c.id));
+    c.orderCount = campOrders.length;
+  });
+
   active.forEach(c => {
     // Real order count
     const campOrders = allOrders.filter(o => String(o.campaignId) === String(c.id));
@@ -377,7 +384,7 @@ function getCampaignsPublic() {
     }));
   });
 
-  return ok({ campaigns: active, suppliers, ads, marketing: mkt });
+  return ok({ campaigns: active, closedCamps, suppliers, ads, marketing: mkt });
 }
 
 function submitOrder(body) {
@@ -547,6 +554,9 @@ function saveCampaign(body, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
   let c = body.campaign;
   if (typeof c === 'string') try { c = JSON.parse(c); } catch(e) {}
+  // Ensure new fields have defaults
+  if (!c.closedStatus) c.closedStatus = '';
+  if (!c.pickupDate) c.pickupDate = '';
   if (!c || !c.name) return err('團購名稱為必填');
   if (!c.id) c.id = 'C' + new Date().getTime();
   if (!c.createdAt) c.createdAt = ts();
