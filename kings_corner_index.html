@@ -6,6 +6,7 @@
 <title>King's Corner 團購</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
 <style>
+html{scrollbar-gutter:stable}
 :root{
   --gold:#C9A84C;--gold-dark:#8A6E2A;--gold-light:#F5EDD4;
   --dark:#12100E;--dark2:#1E1B17;--dark3:#2A2620;--mid:#3D3830;--border:#4A4540;
@@ -15,11 +16,11 @@
   --page-bg:var(--bg);--page-bg-img:none;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-image:var(--page-bg-img);background-size:cover;background-attachment:fixed;background-position:center;color:var(--dark);min-height:100vh}
+body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-image:var(--page-bg-img);background-size:cover;background-attachment:fixed;background-position:center;color:var(--dark);min-height:100vh;overflow-x:hidden}
 
 /* ── HEADER ── */
-.header{background:var(--banner-bg);background-image:var(--banner-img);background-size:cover;background-position:center;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,0.3)}
-.header-inner{max-width:960px;margin:0 auto;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:relative}
+.header{background:var(--banner-bg);background-image:var(--banner-img);background-size:cover;background-position:center;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,0.3);width:100%}
+.header-inner{max-width:960px;width:100%;margin:0 auto;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:relative}
 .header-inner::before{content:'';position:absolute;inset:0;background:rgba(18,16,14,0.6);display:var(--banner-overlay,none)}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:3px;color:var(--gold);position:relative;z-index:1}
 .logo small{font-size:12px;letter-spacing:1px;color:var(--muted-dark);font-family:'Noto Sans TC',sans-serif;font-weight:400;margin-left:6px;opacity:0.7}
@@ -211,8 +212,8 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 @keyframes loadBar{0%{width:0%;margin-left:0}60%{width:100%;margin-left:0}100%{width:0%;margin-left:100%}}
 
 /* ── MARQUEE ── */
-.marquee-bar{background:var(--dark2);border-bottom:1px solid var(--border);overflow:hidden;height:32px;display:flex;align-items:center}
-.marquee-inner{display:flex;white-space:nowrap;animation:marquee 28s linear infinite}
+.marquee-bar{background:var(--dark2);border-bottom:1px solid var(--border);overflow:hidden;height:32px;display:flex;align-items:center;width:100%}
+.marquee-inner{display:flex;white-space:nowrap;animation:marquee 28s linear infinite;will-change:transform}
 .marquee-inner:hover{animation-play-state:paused}
 .marquee-inner span{font-size:11px;color:var(--muted-dark);padding:0 32px}
 .marquee-inner span strong{color:var(--gold)}
@@ -353,7 +354,10 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 <div class="header">
   <div class="header-inner">
     <div class="logo">King's Corner <small>團購</small></div>
-    <div class="header-date" id="header-date"></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:10px;color:rgba(255,255,255,0.25);font-family:'Noto Sans TC',sans-serif;letter-spacing:0.5px">開發人員 Timmy</span>
+      <div class="header-date" id="header-date"></div>
+    </div>
   </div>
 </div>
 
@@ -784,6 +788,7 @@ function thumbHtml(p) {
 let currentCampaign=null, currentSupplierId=null, qty={}, cdTimer=null;
 let appliedPromo=null;
 
+// Developer 蔡永泰
 // ── CART STATE ──
 // cart = { [campaignId]: { campaign, items: [{id,name,qty,price}], promoCode, promoResult } }
 let cart = {};
@@ -1045,9 +1050,12 @@ function renderCartPage(){
       <div style="background:#fff;border:2px solid #e8c84c;border-radius:10px;padding:12px 14px">
         ${mergedNotesHtml}
       </div>
-      <label style="display:flex;align-items:flex-start;gap:10px;margin-top:12px;cursor:pointer">
-        <input type="checkbox" id="notes-confirm-cb" style="width:20px;height:20px;cursor:pointer;accent-color:var(--dark);flex-shrink:0;margin-top:1px" onchange="updateCartSubmitBtn()">
-        <span style="font-size:13px;color:#333;font-weight:600;line-height:1.5">我已閱讀並了解以上備註 / 付款說明</span>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-top:12px;cursor:pointer;background:#fff8e8;border:2px solid #e8c84c;border-radius:10px;padding:12px 14px">
+        <input type="checkbox" id="notes-confirm-cb" style="width:22px;height:22px;cursor:pointer;accent-color:var(--dark);flex-shrink:0;margin-top:1px" onchange="updateCartSubmitBtn()">
+        <div>
+          <div style="font-size:13px;color:#333;font-weight:700;line-height:1.5">✅ 勾選此處才能送出訂單</div>
+          <div style="font-size:12px;color:#888;margin-top:2px">我已閱讀並了解以上備註 / 付款說明</div>
+        </div>
       </label>
     </div>`;
   }
@@ -1253,6 +1261,7 @@ async function applyCartPromo(campaignId){
   await applyGlobalPromo();
 }
 
+// 開發人員Yungtaitsai
 async function submitCart(){
   const name=document.getElementById('cart-name')?.value.trim();
   const phone=document.getElementById('cart-phone')?.value.trim();
@@ -1326,14 +1335,33 @@ async function submitCart(){
   btn.disabled=false;btn.textContent='確認送出訂單';
 
   if(allSuccess){
-    // Only clear cart after confirmed success
     const savedName=name, savedPhone=phone;
     cart={};updateCartBadge();
     closeCartPage();
     showCartSuccess(savedName,savedPhone,orderIds,shipLabel,shippingFee);
   } else {
-    errEl.textContent='部分訂單失敗：'+failedCamps.join('、');
+    // Show detailed error with remove buttons for failed campaigns
+    const failHtml = failedCamps.map(f => {
+      // Parse camp name vs error message
+      const colonIdx = f.indexOf(': ');
+      const campLabel = colonIdx > 0 ? f.slice(0, colonIdx) : f;
+      const errMsg = colonIdx > 0 ? f.slice(colonIdx + 2) : '';
+      // Find campaignId by name
+      const failEntry = Object.values(cart).find(e => e.campaign.name === campLabel);
+      const campId = failEntry?.campaign?.id || '';
+      return `<div style="background:#fff5f5;border:1px solid #ffd6d6;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:700;color:#c0392b;margin-bottom:4px">❌ ${campLabel}</div>
+        <div style="font-size:12px;color:#666;margin-bottom:8px">${errMsg}</div>
+        ${campId?`<button onclick="removeFromCart('${campId}');this.closest('div').parentElement.style.display='none';updateCartSummary();"
+          style="background:#c0392b;color:white;border:none;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;touch-action:manipulation">
+          移除此商品後重試
+        </button>`:''}
+      </div>`;
+    }).join('');
+    errEl.innerHTML = `<div style="font-size:13px;font-weight:700;color:#c0392b;margin-bottom:8px">⚠️ 部分訂單未成功送出</div>${failHtml}
+      <div style="font-size:12px;color:#888;margin-top:8px">移除問題商品後，點「確認送出訂單」重試</div>`;
     errEl.style.display='block';
+    errEl.scrollIntoView({behavior:'smooth',block:'center'});
   }
 }
 

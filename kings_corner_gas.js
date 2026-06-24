@@ -414,9 +414,17 @@ function submitOrder(body) {
     });
 
     const failures = [];
+    const inactiveItems = [];
     items.forEach(item => {
       const prod = campProducts.find(p => String(p.id) === String(item.id));
       if (!prod) return;
+      // Check if product is active in product library
+      const allProducts = sheetToObjects(SH.PRODUCTS);
+      const libProd = allProducts.find(p => String(p.id) === String(item.id));
+      if (libProd && (libProd.active === 'false' || libProd.active === false || String(libProd.active).toUpperCase() === 'FALSE')) {
+        inactiveItems.push(item.name);
+        return;
+      }
       const stock = parseInt(prod.stock) || 999;
       const sold = soldMap[item.id] || 0;
       const remaining = Math.max(0, stock - sold);
@@ -424,6 +432,9 @@ function submitOrder(body) {
         failures.push({ name: item.name, ordered: item.qty, remaining });
       }
     });
+    if (inactiveItems.length > 0) {
+      return err('以下商品已停售，請移除後再下單：' + inactiveItems.join('、'));
+    }
 
     if (failures.length > 0) {
       const msg = failures.map(f => `${f.name}：你訂 ${f.ordered} 份，剩餘 ${f.remaining} 份`).join('、');
