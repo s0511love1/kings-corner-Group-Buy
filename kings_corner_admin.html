@@ -1770,13 +1770,13 @@ function renderPromoPage(){
       ? activeRules.slice(0,2).map(r=>{
           let rcfg={};try{rcfg=JSON.parse(r.discountValue||'{}');}catch(e){}
           const campN=r.campaignId==='*'?'預設':(campaigns.find(c=>String(c.id)===String(r.campaignId))?.name||'').slice(0,5)||r.campaignId;
-          if(r.discountType==='percent')return`<span style="font-size:11px;color:var(--red)">${campN}:${rcfg.value||'?'}折</span>`;
+          if(r.discountType==='percent')return`<span style="font-size:11px;color:var(--red)">${campN}:${(()=>{const nv=parseFloat(rcfg.value||0),fv=nv/10;return(fv%1===0?fv.toFixed(0):String(nv))+'折';})()}</span>`;
           if(r.discountType==='amount_per_unit')return`<span style="font-size:11px;color:#5dca8a">${campN}:每份-$${rcfg.perUnit||rcfg.value||'?'}</span>`;
           if(r.discountType==='amount_threshold')return`<span style="font-size:11px;color:#6eb4ff">${campN}:滿$${rcfg.threshold||'?'}折$${rcfg.off||'?'}</span>`;
           return'';
         }).filter(Boolean).join('<br>')
       : (() => {
-          if(p.discountType==='percent')return`<span style="color:var(--red);font-weight:700">${cfg.value||'?'}折</span>`;
+          if(p.discountType==='percent'){const nv=parseFloat(cfg.value||0);const fv=nv/10;const label=(fv%1===0?fv.toFixed(0):String(nv))+'折';return`<span style="color:var(--red);font-weight:700">${label}</span>`;}
           if(p.discountType==='amount_per_unit')return`<span style="color:#5dca8a;font-weight:700">每份-$${cfg.perUnit||cfg.value||'?'}</span>`;
           if(p.discountType==='amount_threshold')return`<span style="color:#6eb4ff;font-weight:700">滿$${cfg.threshold||'?'}折$${cfg.off||'?'}</span>`;
           return'<span style="color:var(--faint)">純追蹤</span>';

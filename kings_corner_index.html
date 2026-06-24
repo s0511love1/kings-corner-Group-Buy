@@ -1399,7 +1399,7 @@ async function applyPromoCode(){
         else cfg={value:dv};
       }catch(e){cfg={value:data.discountValue};}
       let label='純追蹤（不改變價格）';
-      if(data.discountType==='percent')label=`${cfg.value||'?'}折優惠`;
+      if(data.discountType==='percent')label=`${fmtDiscount(cfg.value)}優惠`;
       else if(data.discountType==='amount_per_unit')label=`每份折 $${cfg.perUnit||cfg.value||'?'}`;
       else if(data.discountType==='amount_threshold')label=`滿$${cfg.threshold||'?'}折$${cfg.off||'?'}`;
       resultEl.innerHTML=`<span style="color:#5dca8a">✅ ${data.name}・${label}</span>`;
@@ -1418,6 +1418,14 @@ function getEffectiveDiscount(){
     return val/100;
   }
   return (currentCampaign?.discount||100)/100;
+}
+
+function fmtDiscount(val){
+  // val = 90 → "9折", val = 86 → "86折", val = 100 → "原價"
+  const n = parseFloat(val);
+  if(!n || n >= 100) return '原價';
+  const fold = n / 10;
+  return (fold % 1 === 0 ? fold.toFixed(0) : String(n)) + '折';
 }
 
 function parsePromoConfig(dv){

@@ -956,7 +956,11 @@ function validatePromoCode(code, campaignId) {
   let cfg = {};
   try { cfg = JSON.parse(typeof discountValue === 'string' ? discountValue : JSON.stringify(discountValue)); } catch(e) {}
   let label = '純追蹤';
-  if (rule.discountType === 'percent') label = `${cfg.value || '?'}折`;
+  if (rule.discountType === 'percent') {
+    const n = parseFloat(cfg.value || 0);
+    const fold = n / 10;
+    label = (fold % 1 === 0 ? fold.toFixed(0) : String(n)) + '折';
+  }
   else if (rule.discountType === 'amount_per_unit') label = `每份折 $${cfg.perUnit || cfg.value || '?'}`;
   else if (rule.discountType === 'amount_threshold') label = `滿$${cfg.threshold || '?'}折$${cfg.off || '?'}`;
 
@@ -1008,7 +1012,11 @@ function validatePromoCodeMulti(code, campaignIds) {
     let cfg = {};
     try { cfg = JSON.parse(typeof rule.discountValue === 'string' ? rule.discountValue : JSON.stringify(rule.discountValue || '{}')); } catch(e) {}
     let label = '純追蹤';
-    if (rule.discountType === 'percent') label = `${cfg.value || '?'}折`;
+    if (rule.discountType === 'percent') {
+    const n = parseFloat(cfg.value || 0);
+    const fold = n / 10;
+    label = (fold % 1 === 0 ? fold.toFixed(0) : String(n)) + '折';
+  }
     else if (rule.discountType === 'amount_per_unit') label = `每份折 $${cfg.perUnit || cfg.value || '?'}`;
     else if (rule.discountType === 'amount_threshold') label = `滿$${cfg.threshold || '?'}折$${cfg.off || '?'}`;
 
