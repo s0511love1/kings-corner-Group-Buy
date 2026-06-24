@@ -420,13 +420,13 @@ function submitOrder(body) {
     items.forEach(item => {
       const prod = campProducts.find(p => String(p.id) === String(item.id));
       if (!prod) return;
-      // Check if product is active in product library
-      const libProd = allProducts.find(p => String(p.id) === String(item.id));
+      // Check if product is active in product library (by id or by name as fallback)
+      const libProd = allProducts.find(p => String(p.id) === String(item.id))
+                   || allProducts.find(p => p.name === item.name);
       if (libProd) {
         const activeVal = libProd.active;
-        // Normalize: Sheets boolean TRUE/FALSE, string 'true'/'false'
+        // Normalize all forms: false, 'false', 'FALSE', FALSE
         const isInactive = activeVal === false ||
-          activeVal === 'false' ||
           String(activeVal).toUpperCase() === 'FALSE';
         if (isInactive) {
           inactiveItems.push(item.name);
