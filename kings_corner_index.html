@@ -20,7 +20,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 
 /* ── HEADER ── */
 .header{background:var(--banner-bg);background-image:var(--banner-img);background-size:cover;background-position:center;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,0.3);width:100%}
-.header-inner{max-width:960px;width:100%;margin:0 auto;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:56px;position:relative}
+.header-inner{width:100%;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;position:relative}
 .header-inner::before{content:'';position:absolute;inset:0;background:rgba(18,16,14,0.6);display:var(--banner-overlay,none)}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:3px;color:var(--gold);position:relative;z-index:1}
 .logo small{font-size:12px;letter-spacing:1px;color:var(--muted-dark);font-family:'Noto Sans TC',sans-serif;font-weight:400;margin-left:6px;opacity:0.7}
@@ -212,12 +212,14 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 @keyframes loadBar{0%{width:0%;margin-left:0}60%{width:100%;margin-left:0}100%{width:0%;margin-left:100%}}
 
 /* ── MARQUEE ── */
-.marquee-bar{background:var(--dark2);border-bottom:1px solid var(--border);overflow:hidden;height:32px;display:flex;align-items:center;width:100%}
-.marquee-inner{display:flex;white-space:nowrap;animation:marquee 28s linear infinite;will-change:transform}
+.marquee-bar{background:var(--dark2);border-bottom:1px solid var(--border);overflow:hidden;height:32px;width:100%;position:relative}
+.marquee-inner{display:inline-flex;white-space:nowrap;animation:marquee 28s linear infinite;will-change:transform}
 .marquee-inner:hover{animation-play-state:paused}
+@media(prefers-reduced-motion:reduce){.marquee-inner{animation-duration:60s}}
+@media(max-width:640px){.marquee-inner{animation-duration:20s}}
 .marquee-inner span{font-size:11px;color:var(--muted-dark);padding:0 32px}
 .marquee-inner span strong{color:var(--gold)}
-@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 
 /* ── CAMP BADGES ── */
 .camp-badge-wrap{position:absolute;top:0;left:0;right:0;display:flex;gap:6px;padding:10px 14px;pointer-events:none;z-index:2}
@@ -663,10 +665,10 @@ function buildMarquee(){
     if(names.length)parts.push(`<span>🛒 ${names.join('、')} 剛剛加入 <strong>${c.name}</strong></span>`);
   });
   if(!parts.length){bar.style.display='none';return;}
-  // Duplicate for seamless loop
-  const html=parts.join('')+parts.join('');
-  inner.innerHTML=html;
-  bar.style.display='flex';
+  // Duplicate for seamless loop (content must be exactly 2x for translateX(-50%) trick)
+  const singleHtml=parts.join('');
+  inner.innerHTML=singleHtml+singleHtml;
+  bar.style.display='block';
 }
 
 // ══ 廠商資料 ══
