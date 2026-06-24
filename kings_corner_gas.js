@@ -413,17 +413,25 @@ function submitOrder(body) {
       oi.forEach(i => { soldMap[i.id] = (soldMap[i.id] || 0) + (parseInt(i.qty) || 0); });
     });
 
+    // Query product library once (outside loop for efficiency)
+    const allProducts = sheetToObjects(SH.PRODUCTS);
     const failures = [];
     const inactiveItems = [];
     items.forEach(item => {
       const prod = campProducts.find(p => String(p.id) === String(item.id));
       if (!prod) return;
       // Check if product is active in product library
-      const allProducts = sheetToObjects(SH.PRODUCTS);
       const libProd = allProducts.find(p => String(p.id) === String(item.id));
-      if (libProd && (libProd.active === 'false' || libProd.active === false || String(libProd.active).toUpperCase() === 'FALSE')) {
-        inactiveItems.push(item.name);
-        return;
+      if (libProd) {
+        const activeVal = libProd.active;
+        // Normalize: Sheets boolean TRUE/FALSE, string 'true'/'false'
+        const isInactive = activeVal === false ||
+          activeVal === 'false' ||
+          String(activeVal).toUpperCase() === 'FALSE';
+        if (isInactive) {
+          inactiveItems.push(item.name);
+          return;
+        }
       }
       const stock = parseInt(prod.stock) || 999;
       const sold = soldMap[item.id] || 0;

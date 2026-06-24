@@ -517,6 +517,9 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
     <!-- Order summary -->
     <div class="cart-order-summary" id="cart-summary"></div>
     <div id="cart-submit-error" style="color:var(--red);font-size:12px;margin-bottom:8px;display:none"></div>
+    <div id="cart-notes-hint" style="display:none;font-size:12px;color:#c9a84c;text-align:center;margin-bottom:8px;padding:8px;background:#fffdf0;border-radius:8px;border:1px solid #e8c84c">
+      ⚠️ 請先勾選上方「已閱讀備註 / 付款說明」才能送出訂單
+    </div>
     <button class="cart-submit-btn" id="cart-submit-btn" onclick="submitCart()">確認送出訂單</button>
     <div style="font-size:11px;color:#aaa;text-align:center;margin-top:10px">送出後將收到訂單確認，請依付款說明完成付款</div>
   </div>
@@ -797,6 +800,33 @@ let cart = {};
 let cartShipping = 'pickup'; // pickup / 711 / blackcat
 let cartPayment = 'transfer'; // transfer / cash
 
+const CART_STORAGE_KEY = 'kc_cart_v2'; // v2: item-level remove
+const CART_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function saveCartToStorage(){
+  try{
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({
+      cart, cartShipping, cartPayment,
+      savedAt: Date.now()
+    }));
+  }catch(e){ console.warn('Cart save failed:', e); }
+}
+
+function loadCartFromStorage(){
+  try{
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if(!raw) return;
+    const data = JSON.parse(raw);
+    if(!data.savedAt || Date.now() - data.savedAt > CART_TTL_MS){
+      localStorage.removeItem(CART_STORAGE_KEY);
+      return;
+    }
+    cart = data.cart || {};
+    cartShipping = data.cartShipping || 'pickup';
+    cartPayment = data.cartPayment || 'transfer';
+  }catch(e){ console.warn('Cart load failed:', e); }
+}
+
 const SHIPPING_OPTIONS = {
   pickup:   { label:'自取', fee:0, icon:'🏪' },
   '711':    { label:'7-11 取貨', fee:65, icon:'🏬' },
@@ -814,6 +844,7 @@ function updateCartBadge(){
   const badge=document.getElementById('cart-icon-badge');
   if(iconBtn){iconBtn.style.display=cnt>0?'flex':'none';}
   if(badge){badge.textContent=cnt;badge.style.display=cnt>0?'block':'none';}
+  saveCartToStorage(); // persist on every badge update
 }
 
 // ── ADD TO CART ──
@@ -941,6 +972,7 @@ function clearCart(){
   cart={};
   updateCartBadge();
   renderCartPage();
+  saveCartToStorage();
 }
 
 function selectShipping(type){
@@ -965,6 +997,7 @@ function selectShipping(type){
   const addrRow=document.getElementById('cart-address-row');
   if(addrRow)addrRow.style.display=(type==='711'||type==='blackcat')?'block':'none';
   updateCartSummary();
+  saveCartToStorage();
 }
 function selectPayment(type){
   cartPayment=type;
@@ -1014,10 +1047,7 @@ function renderCartPage(){
         <span class="cart-sup-camp">${c.name}</span>
         <button onclick="removeFromCart('${c.id}')" style="margin-left:auto;background:none;border:none;color:#ccc;font-size:20px;cursor:pointer;touch-action:manipulation;line-height:1" title="移除此團購">×</button>
       </div>
-      ${entry.items.map(i=>`<div class="cart-item-row">
-        <div style="flex:1"><div class="cart-item-name">${i.name}</div><div class="cart-item-spec">× ${i.qty} 份 · $${i.price}/份</div></div>
-        <div class="cart-item-price">$${(i.qty*i.price).toLocaleString()}</div>
-      </div>`).join('')}
+      ${entry.items.map(i=>renderCartItem(c.id,i)).join('')}
       <!-- Promo result for this campaign (read-only, applied globally) -->
       ${hasPromo
         ?`<div class="cart-promo-result" style="color:#2e7d32;padding:8px 16px;background:#f0faf3;border-top:1px solid #d4edda">
@@ -1062,6 +1092,15 @@ function renderCartPage(){
     </div>`;
   }
   container.innerHTML=html;
+  // Event delegation — handles ci-min, ci-pls, ci-rm buttons
+  container.onclick=function(e){
+    const btn=e.target.closest('button');if(!btn)return;
+    const cid=btn.dataset.cid, iid=btn.dataset.iid;
+    if(!cid||!iid)return;
+    if(btn.classList.contains('ci-min'))cartItemChg(cid,iid,-1);
+    else if(btn.classList.contains('ci-pls'))cartItemChg(cid,iid,1);
+    else if(btn.classList.contains('ci-rm'))removeCartItem(cid,iid);
+  };
   updateCartSummary();
   updateCartSubmitBtn();
   // Re-init shipping/payment button state after render
@@ -1072,11 +1111,15 @@ function updateCartSubmitBtn(){
   const btn=document.getElementById('cart-submit-btn');
   if(!btn)return;
   const cb=document.getElementById('notes-confirm-cb');
-  // Check if any notes exist (need confirmation)
   const hasNotes=Object.values(cart).some(e=>e.campaign.note);
   const confirmed=!hasNotes||(cb&&cb.checked);
-  btn.disabled=!confirmed;
-  btn.style.opacity=confirmed?'1':'0.4';
+  const hasInactive=Object.values(cart).some(e=>e.items.some(i=>i._inactive));
+  const canSubmit=confirmed&&!hasInactive;
+  btn.disabled=!canSubmit;
+  btn.style.opacity=canSubmit?'1':'0.4';
+  // Show hint near button if notes not confirmed
+  const hintEl=document.getElementById('cart-notes-hint');
+  if(hintEl){hintEl.style.display=(hasNotes&&!confirmed)?'block':'none';}
 }
 
 function clearCartPromo(campaignId){
@@ -1174,8 +1217,45 @@ function updateCartSummary(){
     </div>`;
 }
 
+function renderCartItem(campId, i){
+  // Use data-* attributes for event delegation (outerHTML loses onclick handlers)
+  const inact = i._inactive;
+  const badge = inact ? '<span style="font-size:11px;font-weight:700;background:#e74c3c;color:white;padding:1px 6px;border-radius:4px;margin-left:6px">已停售</span>' : '';
+  const controls = inact
+    ? '<button class="ci-rm" data-cid="'+campId+'" data-iid="'+i.id+'" style="background:#e74c3c;color:white;border:none;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer;touch-action:manipulation">✕ 移除此品項</button>'
+    : '<button class="ci-min" data-cid="'+campId+'" data-iid="'+i.id+'" style="width:28px;height:28px;border-radius:50%;border:1.5px solid #ddd;background:#fff;font-size:18px;cursor:pointer;touch-action:manipulation">−</button>'
+      +'<span style="min-width:28px;text-align:center;font-weight:700;font-size:15px">'+i.qty+'</span>'
+      +'<button class="ci-pls" data-cid="'+campId+'" data-iid="'+i.id+'" style="width:28px;height:28px;border-radius:50%;border:1.5px solid #ddd;background:#fff;font-size:18px;cursor:pointer;touch-action:manipulation">＋</button>'
+      +'<span style="color:#aaa;font-size:12px">· $'+i.price+'/份</span>'
+      +'<button class="ci-rm" data-cid="'+campId+'" data-iid="'+i.id+'" style="margin-left:auto;background:none;border:none;color:#ccc;font-size:20px;cursor:pointer;touch-action:manipulation">×</button>';
+  return '<div class="cart-item-row" style="'+(inact?'background:#fff5f5;border-left:3px solid #e74c3c':'')+'">'
+    +'<div style="flex:1">'
+    +'<div class="cart-item-name" style="'+(inact?'color:#e74c3c;text-decoration:line-through':'')+'">'+i.name+badge+'</div>'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-top:6px">'+controls+'</div>'
+    +'</div>'
+    +'<div class="cart-item-price" style="'+(inact?'color:#e74c3c;text-decoration:line-through':'')+'">$'+(i.qty*i.price).toLocaleString()+'</div>'
+    +'</div>';
+}
+
 function removeFromCart(campaignId){
   delete cart[campaignId];
+  updateCartBadge();
+  renderCartPage();
+}
+function removeCartItem(campaignId, itemId){
+  const entry=cart[campaignId];if(!entry)return;
+  entry.items=entry.items.filter(i=>String(i.id)!==String(itemId));
+  if(!entry.items.length){delete cart[campaignId];}
+  updateCartBadge();
+  renderCartPage();
+}
+function cartItemChg(campaignId, itemId, delta){
+  const entry=cart[campaignId];if(!entry)return;
+  const item=entry.items.find(i=>String(i.id)===String(itemId));if(!item)return;
+  const c=entry.campaign;
+  const prod=c.products?.find(p=>String(p.id)===String(itemId));
+  const maxStock=prod?.remaining!==undefined?prod.remaining:(parseInt(prod?.stock)||999);
+  item.qty=Math.max(1,Math.min(maxStock,(item.qty||1)+delta));
   updateCartBadge();
   renderCartPage();
 }
@@ -1342,6 +1422,21 @@ async function submitCart(){
     closeCartPage();
     showCartSuccess(savedName,savedPhone,orderIds,shipLabel,shippingFee);
   } else {
+    // Mark inactive items in cart based on error messages
+    failedCamps.forEach(f => {
+      const colonIdx=f.indexOf(': ');
+      const campLabel=colonIdx>0?f.slice(0,colonIdx):f;
+      const errMsg=colonIdx>0?f.slice(colonIdx+2):'';
+      // If error mentions specific product names, mark them
+      Object.values(cart).forEach(entry=>{
+        if(entry.campaign.name===campLabel){
+          entry.items.forEach(item=>{
+            if(errMsg.includes(item.name)){item._inactive=true;}
+          });
+        }
+      });
+    });
+    renderCartPage(); // Re-render to show red items
     // Show detailed error with remove buttons for failed campaigns
     const failHtml = failedCamps.map(f => {
       // Parse camp name vs error message
@@ -1569,7 +1664,7 @@ async function init(){
     }catch(e){ console.warn('GAS 載入失敗，使用靜態資料', e); }
   }
 
-  buildSupTabs();updateCartBadge();renderHome();
+  loadCartFromStorage();buildSupTabs();updateCartBadge();renderHome();
   const urlCid = new URLSearchParams(location.search).get('cid');
   if(urlCid){
     const c = CAMPAIGNS.find(x=>String(x.id)===String(urlCid));
