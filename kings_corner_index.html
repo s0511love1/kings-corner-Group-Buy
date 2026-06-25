@@ -1917,7 +1917,7 @@ function campCardHtml(c, allActive, maxOrders){
     if(!lbl)return'';
     const bg=sold>=300?'#7a1010':sold>=100?'#7a4500':sold>=50?'#5a3a00':'#2a3a2a';
     const col=sold>=300?'#ffaaaa':sold>=100?'#ffc060':sold>=50?'#ffd070':'#80e090';
-    return`<span style="font-size:9px;padding:1px 5px;border-radius:10px;background:${bg};color:${col};font-weight:700;margin-left:4px">${lbl}</span>`;
+    return`<span style="font-size:9px;padding:1px 5px;border-radius:10px;background:${bg};color:${col};font-weight:700;margin-left:4px">已售出${lbl}</span>`;
   }
   const productsWithSales = c.products.map(p=>({...p, sold: parseInt(p.sold)||0}));
   const top3 = productsWithSales.slice().sort((a,b)=>b.sold-a.sold).slice(0,3);
