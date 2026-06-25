@@ -236,7 +236,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="toolbar">
         <div class="search-wrap"><input type="text" id="camp-search" placeholder="搜尋團購名稱" oninput="renderCampaigns()"></div>
         <select id="camp-filter-supplier" onchange="renderCampaigns()"><option value="">所有廠商</option></select>
-        <select id="camp-filter-status" onchange="renderCampaigns()"><option value="">全部狀態</option><option value="active">進行中</option><option value="draft">草稿/暫停</option><option value="closed">已結束</option></select>
+        <select id="camp-filter-status" onchange="renderCampaigns()"><option value="">全部狀態</option><option value="active">進行中</option><option value="draft">草稿/暫停</option><option value="closed">已結束（含結單進度）</option></select>
       </div>
       <div class="table-wrap overflow-x" id="campaigns-table"></div>
     </div>
@@ -832,7 +832,14 @@ function getCampStockSummary(c){
   }));
 }
 function campName(id){return(campaigns.find(c=>String(c.id)===String(id))||{name:'—'}).name;}
-function statusBadge(s){return{active:'<span class="badge badge-active">● 進行中</span>',closed:'<span class="badge badge-closed">已結束</span>',draft:'<span class="badge badge-draft">草稿</span>'}[s]||s;}
+function statusBadge(s,c){
+  if(s==='closed'){
+    const csMap={pending:'🕐 結單中',shipping:'🚚 出貨中',arrived:'📦 已到貨'};
+    const csLabel=csMap[c?.closedStatus||'pending']||csMap.pending;
+    return`<span class="badge badge-closed">已結束</span><div style="font-size:10px;color:var(--gold);margin-top:3px">${csLabel}</div>`;
+  }
+  return{active:'<span class="badge badge-active">● 進行中</span>',draft:'<span class="badge badge-draft">草稿</span>'}[s]||s;
+}
 function daysLeft(deadline,status){
   if(status!=='active')return'';
   const d=Math.ceil((new Date(deadline)-new Date())/(1000*86400));
@@ -919,6 +926,19 @@ async function campBatchStatus(status){
   }catch(e){showToast('更新失敗','error');}finally{loading(false);}
 }
 
+async function quickUpdateClosedStatus(campaignId, newStatus){
+  const c=campaigns.find(x=>String(x.id)===String(campaignId));
+  if(!c)return;
+  const label={pending:'結單中',shipping:'出貨中',arrived:'已到貨'}[newStatus]||newStatus;
+  try{
+    const data=await apiPost({action:'saveCampaign',campaign:{...c,closedStatus:newStatus,products:c.products}});
+    if(data.status==='ok'){
+      c.closedStatus=newStatus;
+      showToast(`已更新為「${label}」✓`);
+    }else{showToast(data.message||'更新失敗','error');}
+  }catch(e){showToast('更新失敗','error');}
+}
+
 function campsTableHtml(list, showCheckbox=false){
   if(!list.length)return`<div class="empty"><div class="empty-icon">🛒</div><p>沒有符合的團購</p></div>`;
   return`<table style="table-layout:fixed;width:100%"><thead><tr>
@@ -948,7 +968,14 @@ function campsTableHtml(list, showCheckbox=false){
       <td style="${cellS}font-size:12px">${c.deadline}<br>${daysLeft(c.deadline,c.status)}</td>
       <td style="${cellS}"><span style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--gold)">${cnt}</span><span style="font-size:10px;color:var(--muted);display:block">筆訂單</span></td>
       <td style="${cellS}width:160px"><div style="max-height:72px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent">${stockHtml}</div></td>
-      <td style="${cellS}">${statusBadge(c.status)}</td>
+      <td style="${cellS}">
+        ${statusBadge(c.status,c)}
+        ${c.status==='closed'?`<select style="margin-top:5px;width:100%;background:var(--dark3);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:11px;color:var(--text);font-family:'Noto Sans TC',sans-serif;cursor:pointer" onchange="quickUpdateClosedStatus('${c.id}',this.value)">
+          <option value="pending" ${(c.closedStatus||'pending')=='pending'?'selected':''}>🕐 結單中</option>
+          <option value="shipping" ${c.closedStatus==='shipping'?'selected':''}>🚚 出貨中</option>
+          <option value="arrived" ${c.closedStatus==='arrived'?'selected':''}>📦 已到貨</option>
+        </select>`:''}
+      </td>
       <td style="${cellS}white-space:nowrap"><div style="display:flex;gap:6px;flex-wrap:nowrap"><button class="btn btn-outline btn-sm" onclick="editCampaign('${c.id}')">編輯</button><button class="btn btn-outline btn-sm" onclick="showCampLink('${c.id}')">連結</button></div></td>
     </tr>`;
   }).join('')+'</tbody></table>';
@@ -1040,7 +1067,7 @@ function onCampStatusChange(){
   const closedRow=document.getElementById('c-closed-status-row');
   const pickupRow=document.getElementById('c-pickup-date-row');
   if(closedRow)closedRow.style.display=(status==='closed')?'block':'none';
-  if(pickupRow)pickupRow.style.display=(status==='closed'||status==='done')?'block':'none';
+  if(pickupRow)pickupRow.style.display=(status==='active'||status==='closed'||status==='done')?'block':'none';
 }
 
 function populateAllowedCodes(selected=[]){
@@ -1079,6 +1106,7 @@ function openNewCampaign(){
   populateAllowedCodes([]);
   loadNoteTemplates();
   document.getElementById('camp-link-section').style.display='none';
+  onCampStatusChange();
   pickerSelectedIds=new Set();wizardStep=1;showWizardStep(1);
   document.getElementById('modal-campaign').classList.add('show');
 }
