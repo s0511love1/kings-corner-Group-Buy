@@ -1053,8 +1053,10 @@ function renderCartPage(){
 
     html+=`<div class="cart-supplier-section">
       <div class="cart-sup-hd">
-        <span style="font-weight:700;color:var(--dark)">${sup?.name||'廠商'}</span>
-        <span class="cart-sup-camp">${c.name}</span>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span style="font-weight:700;font-size:15px;color:var(--dark)">${c.name}</span>
+          <span style="font-size:11px;color:var(--gold-dark);font-weight:700;letter-spacing:0.5px">${sup?.name||'廠商'}</span>
+        </div>
         <button onclick="removeFromCart('${c.id}')" style="margin-left:auto;background:none;border:none;color:#ccc;font-size:20px;cursor:pointer;touch-action:manipulation;line-height:1" title="移除此團購">×</button>
       </div>
       ${entry.items.map(i=>renderCartItem(c.id,i)).join('')}
@@ -1905,8 +1907,20 @@ function campCardHtml(c, allActive, maxOrders){
       </div>
     </div>` : '';
 
-  // Top 3 products by name
-  const top3 = c.products.slice(0,3).map(p=>p.name);
+  // Top 3 products by sold qty, with sales badge
+  function salesBadge(sold){
+    if(!sold||sold<=0)return'';
+    const tiers=[1000,500,300,100,50,10,0];
+    const labels=['1000+','500+','300+','100+','50+','10+',''];
+    const i=tiers.findIndex(t=>sold>=t);
+    const lbl=i>=0?labels[i]:'';
+    if(!lbl)return'';
+    const bg=sold>=300?'#7a1010':sold>=100?'#7a4500':sold>=50?'#5a3a00':'#2a3a2a';
+    const col=sold>=300?'#ffaaaa':sold>=100?'#ffc060':sold>=50?'#ffd070':'#80e090';
+    return`<span style="font-size:9px;padding:1px 5px;border-radius:10px;background:${bg};color:${col};font-weight:700;margin-left:4px">${lbl}</span>`;
+  }
+  const productsWithSales = c.products.map(p=>({...p, sold: parseInt(p.sold)||0}));
+  const top3 = productsWithSales.slice().sort((a,b)=>b.sold-a.sold).slice(0,3);
   const moreCount = c.products.length - 3;
   const isHot = allActive&&allActive.length>0&&allActive[0]?.id===c.id&&(parseInt(c.orderCount)||0)===maxOrders&&maxOrders>0;
 
@@ -1926,7 +1940,7 @@ function campCardHtml(c, allActive, maxOrders){
     <div class="camp-body">
       <!-- Top 3 products -->
       <div style="margin-bottom:10px">
-        ${top3.map(n=>`<div style="font-size:13px;color:#333;padding:3px 0;border-bottom:1px solid #f0ede8;display:flex;align-items:center;gap:6px"><span style="color:#c9a84c;font-size:10px">▶</span>${n}</div>`).join('')}
+        ${top3.map(p=>`<div style="font-size:13px;color:#333;padding:3px 0;border-bottom:1px solid #f0ede8;display:flex;align-items:center;gap:6px"><span style="color:#c9a84c;font-size:10px">▶</span>${p.name}${salesBadge(p.sold)}</div>`).join('')}
         ${moreCount>0?`<div style="font-size:11px;color:#aaa;margin-top:4px">… 等共 ${c.products.length} 種</div>`:''}
       </div>
       <!-- Deadline + people -->
@@ -1961,12 +1975,31 @@ function buildOrderPage(){
   }
   // Auto-fill promo code from URL or carry from existing cart entry
   const urlCode=new URLSearchParams(location.search).get('code');
-  const existingCode=cart[currentCampaign?.id]?.promoCode||'';
+  const existingEntry=cart[currentCampaign?.id];
+  const existingCode=existingEntry?.promoCode||'';
+  const existingPromoResult=existingEntry?.promoResult||null;
   const codeToUse=urlCode||existingCode;
   if(codeToUse){
     document.getElementById('f-promo').value=codeToUse.toUpperCase();
-    appliedPromo=cart[currentCampaign?.id]?.promoResult||null;
-    setTimeout(applyPromoCode,500);
+    if(!urlCode && existingPromoResult && !existingPromoResult.error){
+      // 已有有效的驗證結果，直接顯示，不重新驗證
+      appliedPromo=existingPromoResult;
+      const resultEl=document.getElementById('promo-result');
+      if(resultEl){
+        let label='純追蹤（不改變價格）';
+        const d=existingPromoResult;
+        let cfg={};try{const dv=d.discountValue;if(typeof dv==='string'&&dv.startsWith('{'))cfg=JSON.parse(dv);else if(typeof dv==='object'&&dv!==null)cfg=dv;else cfg={value:dv};}catch(e){cfg={value:d.discountValue};}
+        if(d.discountType==='percent')label=`${fmtDiscount(cfg.value)}優惠`;
+        else if(d.discountType==='amount_per_unit')label=`每份折 $${cfg.perUnit||cfg.value||'?'}`;
+        else if(d.discountType==='amount_threshold')label=`滿$${cfg.threshold||'?'}折$${cfg.off||'?'}`;
+        resultEl.innerHTML=`<span style="color:#5dca8a">✅ ${d.name}・${label}</span>`;
+        resultEl.style.display='block';
+      }
+    } else {
+      // URL 帶入或尚未驗證過，重新驗證
+      appliedPromo=null;
+      setTimeout(applyPromoCode,500);
+    }
   } else {
     appliedPromo=null;
     document.getElementById('f-promo').value='';
@@ -1995,9 +2028,8 @@ function buildOrderPage(){
   document.getElementById('cat-panels').innerHTML = validCats.map((cat,i)=>
     `<div class="cat-panel ${i===0?'active':''}" id="cp-${CSS.escape(cat)}">` +
     c.products.filter(p=>p.cat===cat).map(p=>{
-      qty[p.id]=0;
+      if(qty[p.id]===undefined)qty[p.id]=0; // keep pre-filled qty from existing cart
       const isSoldOut=p.remaining===0;
-      if(qty[p.id]===undefined)qty[p.id]=0; // keep pre-filled qty
       // Init stepper button states for pre-filled qty
       const initQ=qty[p.id]||0;
       return `<div class="prod-item" style="${isSoldOut?'opacity:0.5':''}">
