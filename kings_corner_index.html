@@ -803,6 +803,7 @@ let currentCampaign=null, currentSupplierId=null, qty={}, cdTimer=null;
 let appliedPromo=null;
 
 // Developer 蔡永泰
+let CLOSED_CAMPS = []; // Loaded from GAS
 // ── CART STATE ──
 // cart = { [campaignId]: { campaign, items: [{id,name,qty,price}], promoCode, promoResult } }
 let cart = {};
@@ -1665,6 +1666,7 @@ async function init(){
           CAMPAIGNS.length = 0;
           data.campaigns.forEach(c => CAMPAIGNS.push(c));
         }
+        if(data.closedCamps){ CLOSED_CAMPS = data.closedCamps; }
         // Sync ads from GAS
         if(data.ads){
           Object.entries(data.ads).forEach(([sid, slides]) => {
@@ -1689,7 +1691,8 @@ async function init(){
     }catch(e){ console.warn('GAS 載入失敗，使用靜態資料', e); }
   }
 
-  loadCartFromStorage();buildSupTabs();updateCartBadge();renderHome();
+  loadCartFromStorage();buildSupTabs();updateCartBadge();
+  try{ renderHome(); }catch(e){ console.error('renderHome error:',e); }
   const urlCid = new URLSearchParams(location.search).get('cid');
   if(urlCid){
     const c = CAMPAIGNS.find(x=>String(x.id)===String(urlCid));
@@ -1698,11 +1701,11 @@ async function init(){
   // Default to 全部 — do not auto-select any supplier
   buildMarquee();
   // Hide loading screen with fade
-  setTimeout(()=>{
+  // Always hide loading screen — even if something failed above
+  try{
     const ls = document.getElementById('loading-screen');
-    if(ls) ls.classList.add('hide');
-    setTimeout(()=>{if(ls)ls.style.display='none';}, 500);
-  }, 300);
+    if(ls){ ls.classList.add('hide'); setTimeout(()=>{ls.style.display='none';},500); }
+  }catch(e){}
 }
 
 // ── SUP TABS ──
@@ -1748,16 +1751,18 @@ function renderHome(){
     ...c,
     orderCount: parseInt(c.orderCount)||0
   }));
-  const maxOrders = Math.max(...activeWithCounts.map(c=>c.orderCount), 0);
+  const maxOrders = activeWithCounts.length ? Math.max(...activeWithCounts.map(c=>c.orderCount), 0) : 0;
   activeWithCounts.sort((a,b)=>{
     // Hottest first, then by deadline
     if(b.orderCount !== a.orderCount) return b.orderCount - a.orderCount;
     return new Date(a.deadline) - new Date(b.deadline);
   });
-  document.getElementById('active-grid').innerHTML = active.length ? activeWithCounts.map(c=>campCardHtml(c,activeWithCounts,maxOrders)).join('') : `<div style="color:#aaa;font-size:13px;padding:6px 0">目前沒有進行中的團購</div>`;
+  document.getElementById('active-grid').innerHTML = active.length
+    ? activeWithCounts.map(c=>{ try{ return campCardHtml(c,activeWithCounts,maxOrders); }catch(e){ console.error('card error',c.id,e); return ''; } }).join('')
+    : `<div style="color:#aaa;font-size:13px;padding:6px 0">目前沒有進行中的團購</div>`;
   document.getElementById('closed-label').style.display = 'none'; // hide old closed section
   document.getElementById('closed-grid').innerHTML = '';
-  renderClosedProgress();
+  try{ renderClosedProgress(); }catch(e){ console.error('closedProgress error:',e); }
 }
 
 function renderClosedProgress(){
