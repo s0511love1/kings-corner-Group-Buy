@@ -1047,8 +1047,9 @@ function renderCartPage(){
     const totalQty=entry.items.reduce((s,i)=>s+i.qty,0);
     const disc=calcCartItemDiscount(itemTotal,totalQty,c,entry.promoResult);
     const discounted=Math.max(0,itemTotal-disc);
-    const baseSaving=Math.round(itemTotal*(1-(c.discount||100)/100));
+    const baseSaving=applyCampDiscountRule(itemTotal,totalQty,c.discountRule||null);
     const promoSaving=disc-baseSaving;
+    const campLbl=campDiscountLabel(c.discountRule||null);
     const hasPromo=entry.promoResult&&!entry.promoResult.error;
 
     html+=`<div class="cart-supplier-section">
@@ -1067,7 +1068,7 @@ function renderCartPage(){
         :(entry.promoResult?.error
           ?`<div class="cart-promo-result" style="color:var(--red);padding:8px 16px;background:#fff5f5;border-top:1px solid #ffd6d6">❌ ${entry.promoResult.error}</div>`
           :'')}
-      ${baseSaving>0?`<div style="padding:4px 16px 6px;font-size:11px;color:#aaa">原價 $${itemTotal} → 團購價 $${Math.round(itemTotal*(c.discount||100)/100)}${disc>baseSaving?' → 優惠碼 $'+discounted:''}</div>`:''}
+      ${baseSaving>0?`<div style="padding:4px 16px 6px;font-size:11px;color:#aaa">原價 $${itemTotal} → 團購${campLbl?'（'+campLbl+'）':''}$${itemTotal-baseSaving}${disc>baseSaving?' → 優惠碼 $'+(itemTotal-disc):''}</div>`:''}
       <div class="cart-subtotal">
         <div class="cart-subtotal-label">${c.name} 小計</div>
         <div class="cart-subtotal-amount">$${discounted.toLocaleString()}</div>
@@ -1144,28 +1145,61 @@ function clearCartPromo(campaignId){
   clearGlobalPromo();
 }
 
+// ── 計算團購折扣（campaign discountRule）──
+function applyCampDiscountRule(subtotal, totalQty, rule){
+  if(!rule||rule.type==='none')return 0;
+  if(rule.type==='percent'){
+    const pct=parseFloat(rule.value||100)/100;
+    return Math.round(subtotal*(1-pct));
+  }
+  if(rule.type==='amount_per_unit'){
+    return Math.round(parseFloat(rule.perUnit||rule.value||0)*totalQty);
+  }
+  if(rule.type==='amount_threshold'){
+    const threshold=parseFloat(rule.threshold||0);
+    const off=parseFloat(rule.off||0);
+    return subtotal>=threshold?off:0;
+  }
+  return 0;
+}
+// ── 團購折扣的人類可讀標籤 ──
+function campDiscountLabel(rule){
+  if(!rule||rule.type==='none')return'';
+  if(rule.type==='percent'){
+    const n=parseFloat(rule.value||100);
+    if(n>=100)return'';
+    const fold=n/10;
+    return(fold%1===0?fold.toFixed(0):String(n))+'折';
+  }
+  if(rule.type==='amount_per_unit')return`每份折$${rule.perUnit||rule.value||'?'}`;
+  if(rule.type==='amount_threshold')return`滿$${rule.threshold||'?'}折$${rule.off||'?'}`;
+  return'';
+}
+
 function calcCartItemDiscount(subtotal, totalQty, campaign, promoResult){
-  // Base campaign discount
-  const baseDisc=Math.round(subtotal*(1-(campaign.discount||100)/100));
-  if(!promoResult||promoResult.error)return baseDisc;
+  // Layer 1：團購折扣
+  const campRule=campaign.discountRule||null;
+  const campDisc=applyCampDiscountRule(subtotal,totalQty,campRule);
+  const afterCamp=subtotal-campDisc;
+  if(!promoResult||promoResult.error)return campDisc;
+  // Layer 2：優惠碼折扣（疊加在團購折後價上）
   const type=promoResult.discountType;
   let cfg={};
   try{cfg=JSON.parse(promoResult.discountValue||'{}');}catch(e){}
   if(type==='percent'){
     const pct=parseFloat(cfg.value||100)/100;
-    return Math.round(subtotal*(1-pct));
+    return campDisc+Math.round(afterCamp*(1-pct));
   }
   if(type==='amount_per_unit'){
     const perUnit=parseFloat(cfg.perUnit||cfg.value||0);
-    return baseDisc+Math.round(perUnit*totalQty);
+    return campDisc+Math.round(perUnit*totalQty);
   }
   if(type==='amount_threshold'){
-    const after=Math.round(subtotal*(campaign.discount||100)/100);
     const threshold=parseFloat(cfg.threshold||0);
     const off=parseFloat(cfg.off||0);
-    return baseDisc+(after>=threshold?off:0);
+    return campDisc+(afterCamp>=threshold?off:0);
   }
-  return baseDisc;
+  return campDisc;
 }
 
 function calcCartItemTotal(entry){
@@ -1204,7 +1238,7 @@ function updateCartSummary(){
       </div>`;
     });
     // Always show subtotal, discount lines only if applicable
-    const baseSaving=Math.round(subtotal*(1-(c.discount||100)/100));
+    const baseSaving=applyCampDiscountRule(subtotal,totalQty,c.discountRule||null);
     const promoSaving=disc-baseSaving;
     if(baseSaving>0){
       rowsHtml+=`<div class="cart-summary-row" style="font-size:12px;color:#2e7d32">
@@ -1413,7 +1447,7 @@ async function submitCart(){
     const disc=calcCartItemDiscount(subtotal,totalQty,c,entry.promoResult);
     const discounted=Math.max(0,subtotal-disc);
     const promoCode=entry.promoResult&&!entry.promoResult.error?entry.promoResult.code||'':'';
-    const promoDiscount=disc-(Math.round(subtotal*(1-(c.discount||100)/100)));
+    const promoDiscount=disc-applyCampDiscountRule(subtotal,totalQty,c.discountRule||null);
 
     try{
       const isFirstOrder=orderIds.length===0&&failedCamps.length===0;
@@ -1561,27 +1595,25 @@ function parsePromoConfig(dv){
 }
 
 function calcDiscountedTotal(subtotal, totalQty){
-  if(!appliedPromo||appliedPromo.discountType==='none'){
-    return Math.round(subtotal*(currentCampaign?.discount||100)/100);
-  }
+  const campRule=currentCampaign?.discountRule||null;
+  const campDisc=applyCampDiscountRule(subtotal,totalQty,campRule);
+  const afterCamp=subtotal-campDisc;
+  if(!appliedPromo||appliedPromo.discountType==='none')return afterCamp;
   const cfg=parsePromoConfig(appliedPromo.discountValue);
-
   if(appliedPromo.discountType==='percent'){
     const pct=parseFloat(cfg.value||100)/100;
-    return Math.round(subtotal*pct);
+    return Math.max(0,Math.round(afterCamp*pct));
   }
   if(appliedPromo.discountType==='amount_per_unit'){
     const perUnit=parseFloat(cfg.perUnit||cfg.value||0);
-    const base=Math.round(subtotal*(currentCampaign?.discount||100)/100);
-    return Math.max(0, base - Math.round(perUnit*totalQty));
+    return Math.max(0,afterCamp-Math.round(perUnit*totalQty));
   }
   if(appliedPromo.discountType==='amount_threshold'){
     const threshold=parseFloat(cfg.threshold||0);
     const off=parseFloat(cfg.off||0);
-    const base=Math.round(subtotal*(currentCampaign?.discount||100)/100);
-    return base>=threshold?Math.max(0,base-off):base;
+    return afterCamp>=threshold?Math.max(0,afterCamp-off):afterCamp;
   }
-  return Math.round(subtotal*(currentCampaign?.discount||100)/100);
+  return afterCamp;
 }
 
 // ── QUERY ORDER ──
@@ -2101,10 +2133,12 @@ function updateCart(){
   const savingsEl=document.getElementById('cart-savings');
   if(savingsEl){
     if(appliedPromo&&appliedPromo.discountType!=='none'&&promoSaving>0){
-      savingsEl.innerHTML=`原價 <s style="color:#aaa">$${total.toLocaleString()}</s> → 團購價 <strong style="color:var(--gold)">$${baseDisc.toLocaleString()}</strong> → 優惠碼再省 <strong style="color:#5dca8a">$${promoSaving.toLocaleString()}</strong>`;
+      const campLbl=campDiscountLabel(currentCampaign?.discountRule)||'';
+      savingsEl.innerHTML=`原價 <s style="color:#aaa">$${total.toLocaleString()}</s> → 團購${campLbl?'（'+campLbl+'）':''} <strong style="color:var(--gold)">$${baseDisc.toLocaleString()}</strong> → 優惠碼再省 <strong style="color:#5dca8a">$${promoSaving.toLocaleString()}</strong>`;
       savingsEl.style.display='block';
     } else if(total>0){
-      savingsEl.innerHTML=`原價 <s style="color:#aaa">$${total.toLocaleString()}</s> → 團購限定價 <strong style="color:var(--gold)">$${baseDisc.toLocaleString()}</strong>（省 $${(total-baseDisc).toLocaleString()}）`;
+      const campLbl2=campDiscountLabel(currentCampaign?.discountRule)||'';
+      savingsEl.innerHTML=`原價 <s style="color:#aaa">$${total.toLocaleString()}</s> → 團購${campLbl2?'（'+campLbl2+'）':''} <strong style="color:var(--gold)">$${baseDisc.toLocaleString()}</strong>（省 $${(total-baseDisc).toLocaleString()}）`;
       savingsEl.style.display=total>baseDisc?'block':'none';
     } else {
       savingsEl.style.display='none';

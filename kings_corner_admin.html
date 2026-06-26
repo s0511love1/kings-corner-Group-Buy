@@ -429,7 +429,16 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <div class="ff" style="margin-bottom:0"><label>最低成團人數</label><input type="number" id="c-min" placeholder="10" min="1"></div>
       </div>
       <div class="form-row" style="margin-bottom:14px">
-        <div class="ff" style="margin-bottom:0"><label>折扣 (%)</label><input type="number" id="c-discount" placeholder="86" min="1" max="100"></div>
+        <div class="ff" style="margin-bottom:0">
+          <label>團購折扣</label>
+          <select id="c-discount-type" onchange="onDiscountTypeChange()" style="background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none;width:100%;margin-bottom:6px">
+            <option value="none">無折扣（原價）</option>
+            <option value="percent">百分比折扣（幾折）</option>
+            <option value="amount_per_unit">每份折固定金額</option>
+            <option value="amount_threshold">滿額折扣</option>
+          </select>
+          <div id="c-discount-inputs" style="display:none;gap:6px;flex-wrap:wrap"></div>
+        </div>
         <div class="ff" style="margin-bottom:0">
           <label>狀態</label>
           <select id="c-status" onchange="onCampStatusChange()">
@@ -437,7 +446,6 @@ tr:hover td{background:rgba(255,255,255,0.02)}
             <option value="draft">草稿/暫停</option>
             <option value="closed">已結單</option>
             <option value="done">已結束（移至歷史）</option>
-            <option value="done">已結束</option>
           </select>
         </div>
         <div class="ff" style="margin-bottom:0" id="c-pickup-date-row">
@@ -1070,6 +1078,28 @@ async function saveNoteTemplate(){
   }catch(e){showToast('儲存失敗','error');}finally{loading(false);}
 }
 
+function onDiscountTypeChange(prefill){
+  const type=document.getElementById('c-discount-type').value;
+  const wrap=document.getElementById('c-discount-inputs');
+  if(type==='none'){wrap.style.display='none';wrap.innerHTML='';return;}
+  wrap.style.display='flex';
+  const inp=(id,label,placeholder,val='')=>`<div style="flex:1;min-width:80px"><div style="font-size:10px;color:var(--muted);margin-bottom:4px">${label}</div><input id="${id}" type="number" placeholder="${placeholder}" value="${val}" style="width:100%;background:var(--dark3);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:14px;color:var(--gold);font-family:'Bebas Neue',sans-serif;text-align:center;outline:none"></div>`;
+  if(type==='percent'){
+    wrap.innerHTML=inp('c-dr-value','折數（90=9折，86=86折）','90',prefill?.value||'');
+  } else if(type==='amount_per_unit'){
+    wrap.innerHTML=inp('c-dr-per-unit','每份折（元）','5',prefill?.perUnit||prefill?.value||'');
+  } else if(type==='amount_threshold'){
+    wrap.innerHTML=inp('c-dr-threshold','滿額門檻','1000',prefill?.threshold||'')+inp('c-dr-off','折扣金額','100',prefill?.off||'');
+  }
+}
+function getCampDiscountRule(){
+  const type=document.getElementById('c-discount-type')?.value||'none';
+  if(type==='none')return null;
+  if(type==='percent')return{type,value:document.getElementById('c-dr-value')?.value||''};
+  if(type==='amount_per_unit')return{type,perUnit:document.getElementById('c-dr-per-unit')?.value||''};
+  if(type==='amount_threshold')return{type,threshold:document.getElementById('c-dr-threshold')?.value||'',off:document.getElementById('c-dr-off')?.value||''};
+  return null;
+}
 function onCampStatusChange(){
   const status=document.getElementById('c-status').value;
   const closedRow=document.getElementById('c-closed-status-row');
@@ -1109,7 +1139,7 @@ function openNewCampaign(){
   document.getElementById('mc-title').textContent='新增團購';
   ['c-name','c-note'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('c-deadline').value='';
-  document.getElementById('c-min').value='10';document.getElementById('c-discount').value='86';document.getElementById('c-status').value='active';
+  document.getElementById('c-min').value='10';document.getElementById('c-discount-type').value='none';onDiscountTypeChange();document.getElementById('c-status').value='active';
   populateCampaignSel('c-supplier-sel');document.getElementById('prod-rows').innerHTML='';
   populateAllowedCodes([]);
   loadNoteTemplates();
@@ -1122,7 +1152,15 @@ function editCampaign(id){
   const c=campaigns.find(x=>String(x.id)===String(id));if(!c)return;
   editCampaignId=String(id);document.getElementById('mc-title').textContent='編輯團購';
   document.getElementById('c-name').value=c.name;document.getElementById('c-deadline').value=c.deadline;
-  document.getElementById('c-min').value=c.minPeople||'';document.getElementById('c-discount').value=c.discount||'';
+  document.getElementById('c-min').value=c.minPeople||'';
+  // 載入 discountRule
+  const dr=c.discountRule||(c.discount?{type:'percent',value:String(c.discount)}:null);
+  if(dr&&dr.type&&dr.type!=='none'){
+    document.getElementById('c-discount-type').value=dr.type;
+    onDiscountTypeChange(dr);
+  } else {
+    document.getElementById('c-discount-type').value='none';onDiscountTypeChange();
+  }
   document.getElementById('c-status').value=c.status;document.getElementById('c-note').value=c.note||'';
   populateCampaignSel('c-supplier-sel');document.getElementById('c-supplier-sel').value=String(c.supplierId||'');
   document.getElementById('prod-rows').innerHTML='';
@@ -1240,7 +1278,7 @@ async function saveCampaign(){
   const campStatus=document.getElementById('c-status').value;
   const campaign={id:campId,name,supplierId,deadline,
     minPeople:document.getElementById('c-min').value||10,
-    discount:document.getElementById('c-discount').value||100,
+    discountRule:getCampDiscountRule(),
     status:campStatus,
     closedStatus:(campStatus==='closed'||campStatus==='done')?(document.getElementById('c-closed-status')?.value||'pending'):'',
     pickupDate:document.getElementById('c-pickup-date')?.value||'',
@@ -1542,7 +1580,9 @@ function reopenCampaign(id){
   document.getElementById('c-name').value=c.name+' (複製)';
   document.getElementById('c-deadline').value=''; // Must fill new date
   document.getElementById('c-min').value=c.minPeople||10;
-  document.getElementById('c-discount').value=c.discount||86;
+  const dr2=c.discountRule||(c.discount?{type:'percent',value:String(c.discount)}:null);
+  if(dr2&&dr2.type&&dr2.type!=='none'){document.getElementById('c-discount-type').value=dr2.type;onDiscountTypeChange(dr2);}
+  else{document.getElementById('c-discount-type').value='none';onDiscountTypeChange();}
   document.getElementById('c-status').value='active';
   document.getElementById('c-note').value=c.note||'';
   // Pre-fill products
@@ -1995,6 +2035,15 @@ function openEditPromo(id){
   document.getElementById('modal-promo').classList.add('show');
 }
 async function savePromo(){
+  // 驗證：同一 campaignId 不能有重複規則
+  const dupCheck={};
+  for(const r of promoRules){
+    if(!r.campaignId)continue;
+    if(dupCheck[r.campaignId]){
+      showToast(`同一團購「${r.campaignId}」只能有一條規則，請移除重複的`,'error');return;
+    }
+    dupCheck[r.campaignId]=true;
+  }
   const code=document.getElementById('pc-code').value.trim().toUpperCase();
   const name=document.getElementById('pc-name').value.trim();
   if(!code){showToast('請輸入優惠碼','error');return;}

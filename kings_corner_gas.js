@@ -137,7 +137,7 @@ function initSheets() {
   // 其他工作表預建
   ensureSheet(SH.SUPPLIERS, ['id','name','cat','contact','note','createdAt']);
   ensureSheet(SH.PRODUCTS,  ['id','supplierId','name','cat','spec','price','img','active']);
-  ensureSheet(SH.CAMPAIGNS, ['id','name','supplierId','deadline','minPeople','discount','status','closedStatus','pickupDate','note','products','allowedCodes','createdAt']);
+  ensureSheet(SH.CAMPAIGNS, ['id','name','supplierId','deadline','minPeople','discountRule','status','closedStatus','pickupDate','note','products','allowedCodes','createdAt']);
   ensureSheet(SH.ORDERS,    ['id','campaignId','campaignName','supplierId','name','phone','items','itemCount','total','discounted','paid','ts']);
   ensureSheet(SH.ADS,       ['supplierId','slides']); // slides 存 JSON
   ensureSheet(SH.MARKETING,   ['key','value']);
@@ -363,10 +363,37 @@ function getCampaignsPublic() {
     c.orderCount = campOrders.length;
   });
 
+  // Helper：解析 discountRule
+  function parseCampDiscount(c) {
+    if (!c.discountRule || c.discountRule === '') return null;
+    try {
+      const r = typeof c.discountRule === 'string' ? JSON.parse(c.discountRule) : c.discountRule;
+      if (r && r.type) return r;
+      return null;
+    } catch(e) { return null; }
+  }
+
+  // Helper：計算單一品項的團購折後價
+  function applyCampDiscount(price, qty, rule) {
+    if (!rule) return price * qty;
+    const total = price * qty;
+    if (rule.type === 'percent') {
+      return Math.round(total * (parseFloat(rule.value) / 100));
+    } else if (rule.type === 'amount_per_unit') {
+      return Math.round(total - (parseFloat(rule.perUnit || rule.value || 0) * qty));
+    } else if (rule.type === 'amount_threshold') {
+      const off = total >= parseFloat(rule.threshold || 0) ? parseFloat(rule.off || 0) : 0;
+      return Math.round(total - off);
+    }
+    return total;
+  }
+
   active.forEach(c => {
     // Real order count
     const campOrders = allOrders.filter(o => String(o.campaignId) === String(c.id));
     c.orderCount = campOrders.length;
+    // 解析 discountRule 帶到前端
+    c.discountRule = parseCampDiscount(c) || null;
 
     // Sold qty per product
     const soldMap = {};
@@ -561,7 +588,12 @@ function saveCampaign(body, user) {
   if (!c.id) c.id = 'C' + new Date().getTime();
   if (!c.createdAt) c.createdAt = ts();
   c.products = JSON.stringify(c.products || []);
-  const headers = ['id','name','supplierId','deadline','minPeople','discount','status','note','products','createdAt'];
+  // discountRule: JSON string，discountType + discountValue 結構
+  if (c.discountRule && typeof c.discountRule === 'object') {
+    c.discountRule = JSON.stringify(c.discountRule);
+  }
+  if (!c.discountRule) c.discountRule = '';
+  const headers = ['id','name','supplierId','deadline','minPeople','discountRule','status','closedStatus','pickupDate','note','products','allowedCodes','createdAt'];
   upsertRow(SH.CAMPAIGNS, headers, c, 'id');
   return ok({ id: c.id });
 }
@@ -920,25 +952,6 @@ function testAutoClose() {
   autoCloseCampaigns();
 }
 
-// ── 建立每日自動關閉觸發器（執行一次即可，重複執行會自動去重）──
-function createAutoCloseTrigger() {
-  // 刪除舊的同名觸發器，避免重複
-  ScriptApp.getProjectTriggers()
-    .filter(t => t.getHandlerFunction() === 'autoCloseCampaigns')
-    .forEach(t => ScriptApp.deleteTrigger(t));
-
-  // 建立新觸發器：每天凌晨 1:00 - 2:00 執行
-  ScriptApp.newTrigger('autoCloseCampaigns')
-    .timeBased()
-    .everyDays(1)
-    .atHour(1)
-    .create();
-
-  Logger.log('✓ 已建立每日自動關閉觸發器（凌晨 1:00）');
-  Logger.log('✓ 立即執行一次，關閉目前已到期的團購…');
-  autoCloseCampaigns(); // 立即跑一次，把現有到期的都關掉
-}
-
 // ════════════════════════════════════════════════════════════
 //  優惠碼驗證（公開端點）
 // ════════════════════════════════════════════════════════════
@@ -1155,188 +1168,6 @@ function batchUpdatePaid(body, user) {
   }
 
   return ok({ updated });
-}
-
-
-// ════════════════════════════════════════════════════════════
-//  圖片管理工具
-//  Step 1: 執行 listDriveImages() 產生圖片清單
-//  Step 2: 執行 autoFillProductImages() 自動寫入商品圖片網址
-// ════════════════════════════════════════════════════════════
-
-// ── 設定：填入你的 Google Drive 圖片資料夾 ID ──────────────
-// 開啟資料夾後，網址末段即為 ID：
-// https://drive.google.com/drive/folders/【這段就是 ID】
-const DRIVE_FOLDER_ID = 'YOUR_DRIVE_FOLDER_ID'; // ← 換成你的資料夾 ID
-
-// Step 1: 掃描資料夾，產生「圖片清單」工作表
-function listDriveImages() {
-  if (DRIVE_FOLDER_ID === 'YOUR_DRIVE_FOLDER_ID') {
-    Logger.log('❌ 請先在 GAS 頂部填入 DRIVE_FOLDER_ID');
-    return;
-  }
-
-  const folder = DriveApp.getFolderById(DRIVE_FOLDER_ID);
-  const files = folder.getFiles();
-  const rows = [['檔名', '商品名稱（對應用）', '圖片網址', '預覽']];
-
-  while (files.hasNext()) {
-    const file = files.next();
-    const mimeType = file.getMimeType();
-    if (!mimeType.startsWith('image/')) continue;
-
-    const fileName = file.getName();
-    const fileId = file.getId();
-    try {
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    } catch(e) {}
-
-    const url = 'https://drive.google.com/uc?export=view&id=' + fileId;
-    const productName = fileName.replace(/\.[^.]+$/, '');
-    rows.push([fileName, productName, url, url]);
-  }
-
-  if (rows.length === 1) {
-    Logger.log('❌ 資料夾內沒有找到圖片，請確認 DRIVE_FOLDER_ID 正確且資料夾內有圖片');
-    return;
-  }
-
-  const spreadsheet = ss();
-  let sheet = spreadsheet.getSheetByName('圖片清單');
-  if (!sheet) sheet = spreadsheet.insertSheet('圖片清單');
-  sheet.clearContents();
-  sheet.getRange(1, 1, rows.length, 4).setValues(rows);
-
-  sheet.getRange(1, 1, 1, 4)
-    .setFontWeight('bold')
-    .setBackground('#12100E')
-    .setFontColor('#C9A84C');
-  sheet.setFrozenRows(1);
-  sheet.setColumnWidth(1, 180);
-  sheet.setColumnWidth(2, 180);
-  sheet.setColumnWidth(3, 420);
-  sheet.setColumnWidth(4, 80);
-
-  for (let i = 2; i <= rows.length; i++) {
-    sheet.getRange(i, 4).setFormula('=IMAGE(C' + i + ',4,60,60)');
-    sheet.setRowHeight(i, 65);
-  }
-
-  Logger.log('✓ 圖片清單已產生，共 ' + (rows.length - 1) + ' 張圖片');
-  Logger.log('→ 請開啟 Google Sheets「圖片清單」工作表確認');
-  Logger.log('→ 確認無誤後執行 autoFillProductImages() 自動寫入商品庫');
-}
-
-// Step 2: 依商品名稱比對，自動把圖片網址寫入商品庫
-// ── 網址格式自動轉換（支援 Google Drive 分享連結、Imgur 等）──
-function normalizeImageUrl(url) {
-  if (!url) return '';
-  url = url.trim();
-
-  // Google Drive: /file/d/ID/view 或 /file/d/ID/view?usp=sharing
-  const driveMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (driveMatch) {
-    return 'https://drive.google.com/uc?export=view&id=' + driveMatch[1];
-  }
-
-  // Google Drive: open?id=ID
-  const driveOpen = url.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/);
-  if (driveOpen) {
-    return 'https://drive.google.com/uc?export=view&id=' + driveOpen[1];
-  }
-
-  // Imgur: imgur.com/xxxxxxx（沒有副檔名）→ 加 .jpg
-  const imgurMatch = url.match(/^https?:\/\/imgur\.com\/([a-zA-Z0-9]+)$/);
-  if (imgurMatch) {
-    return 'https://i.imgur.com/' + imgurMatch[1] + '.jpg';
-  }
-
-  // 其他：直接回傳原始網址
-  return url;
-}
-
-function autoFillProductImages() {
-  const spreadsheet = ss();
-  const imgSheet = spreadsheet.getSheetByName('圖片清單');
-  if (!imgSheet) {
-    Logger.log('❌ 找不到「圖片清單」工作表，請先執行 listDriveImages() 或手動建立');
-    Logger.log('   工作表格式：A欄=檔名（可空）、B欄=商品名稱、C欄=圖片網址');
-    return;
-  }
-
-  const imgData = imgSheet.getDataRange().getValues();
-  const imgMap = {}; // { 商品名稱（完整） → 轉換後網址 }
-  let urlConverted = 0;
-
-  for (let i = 1; i < imgData.length; i++) {
-    const name = String(imgData[i][1]).trim(); // B欄：商品名稱
-    const rawUrl = String(imgData[i][2]).trim(); // C欄：圖片網址
-    if (!name || !rawUrl) continue;
-
-    const normalizedUrl = normalizeImageUrl(rawUrl);
-    // 如果網址有被轉換，回寫到 Sheets C欄，方便確認
-    if (normalizedUrl !== rawUrl) {
-      imgSheet.getRange(i + 1, 3).setValue(normalizedUrl);
-      urlConverted++;
-    }
-    imgMap[name] = normalizedUrl;
-  }
-
-  if (urlConverted > 0) {
-    Logger.log('→ 已自動轉換 ' + urlConverted + ' 個網址格式（已回寫到圖片清單）');
-  }
-
-  if (!Object.keys(imgMap).length) {
-    Logger.log('❌ 圖片清單為空，請確認 B欄有商品名稱、C欄有圖片網址');
-    return;
-  }
-
-  const prodSheet = spreadsheet.getSheetByName(SH.PRODUCTS);
-  if (!prodSheet) { Logger.log('❌ 找不到商品庫工作表'); return; }
-
-  const prodData = prodSheet.getDataRange().getValues();
-  const headers  = prodData[0];
-  const nameCol  = headers.indexOf('name');
-  const imgCol   = headers.indexOf('img');
-
-  if (nameCol < 0) { Logger.log('❌ 商品庫找不到 name 欄位'); return; }
-
-  let imgColIndex = imgCol;
-  if (imgColIndex < 0) {
-    imgColIndex = headers.length;
-    prodSheet.getRange(1, imgColIndex + 1).setValue('img');
-    prodSheet.getRange(1, imgColIndex + 1)
-      .setFontWeight('bold').setBackground('#12100E').setFontColor('#C9A84C');
-    Logger.log('→ 已自動新增 img 欄位到商品庫');
-  }
-
-  let filled = 0, skipped = 0;
-  const notFound = [];
-
-  for (let i = 1; i < prodData.length; i++) {
-    const productName = String(prodData[i][nameCol]).trim();
-    if (!productName) continue;
-
-    // ── 嚴格完全比對，不做模糊比對 ──
-    const url = imgMap[productName];
-
-    if (url) {
-      prodSheet.getRange(i + 1, imgColIndex + 1).setValue(url);
-      filled++;
-    } else {
-      notFound.push(productName);
-      skipped++;
-    }
-  }
-
-  Logger.log('✓ 自動填入完成（嚴格比對）');
-  Logger.log('  成功寫入：' + filled + ' 個商品');
-  Logger.log('  名稱未完全符合，跳過：' + skipped + ' 個');
-  if (notFound.length) {
-    Logger.log('  ── 以下商品在圖片清單找不到完全一致的名稱 ──');
-    notFound.forEach(n => Logger.log('    ✗ ' + n));
-    Logger.log('  → 請到「圖片清單」工作表 B欄，把商品名稱改成完全一樣的文字');
-  }
 }
 
 // ════════════════════════════════════════════════════════════
