@@ -382,7 +382,7 @@ function getCampaignsPublic() {
     } else if (rule.type === 'amount_per_unit') {
       return Math.round(total - (parseFloat(rule.perUnit || rule.value || 0) * qty));
     } else if (rule.type === 'amount_threshold') {
-      const off = total >= parseFloat(rule.threshold || 0) ? parseFloat(rule.off || 0) : 0;
+      const off = Math.floor(total / parseFloat(rule.threshold || 1)) * parseFloat(rule.off || 0);
       return Math.round(total - off);
     }
     return total;
@@ -1012,7 +1012,7 @@ function validatePromoCode(code, campaignId) {
     label = (fold % 1 === 0 ? fold.toFixed(0) : String(n)) + '折';
   }
   else if (rule.discountType === 'amount_per_unit') label = `每份折 $${cfg.perUnit || cfg.value || '?'}`;
-  else if (rule.discountType === 'amount_threshold') label = `滿$${cfg.threshold || '?'}折$${cfg.off || '?'}`;
+  else if (rule.discountType === 'amount_threshold') label = `每滿$${cfg.threshold || '?'}折$${cfg.off || '?'}`;
 
   return ok({
     valid: true,
@@ -1068,7 +1068,7 @@ function validatePromoCodeMulti(code, campaignIds) {
     label = (fold % 1 === 0 ? fold.toFixed(0) : String(n)) + '折';
   }
     else if (rule.discountType === 'amount_per_unit') label = `每份折 $${cfg.perUnit || cfg.value || '?'}`;
-    else if (rule.discountType === 'amount_threshold') label = `滿$${cfg.threshold || '?'}折$${cfg.off || '?'}`;
+    else if (rule.discountType === 'amount_threshold') label = `每滿$${cfg.threshold || '?'}折$${cfg.off || '?'}`;
 
     results[campaignId] = { discountType: rule.discountType, discountValue: rule.discountValue, label };
   });

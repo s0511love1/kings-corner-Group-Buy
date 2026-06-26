@@ -1156,9 +1156,9 @@ function applyCampDiscountRule(subtotal, totalQty, rule){
     return Math.round(parseFloat(rule.perUnit||rule.value||0)*totalQty);
   }
   if(rule.type==='amount_threshold'){
-    const threshold=parseFloat(rule.threshold||0);
+    const threshold=parseFloat(rule.threshold||1);
     const off=parseFloat(rule.off||0);
-    return subtotal>=threshold?off:0;
+    return Math.floor(subtotal/threshold)*off;
   }
   return 0;
 }
@@ -1172,7 +1172,7 @@ function campDiscountLabel(rule){
     return(fold%1===0?fold.toFixed(0):String(n))+'折';
   }
   if(rule.type==='amount_per_unit')return`每份折$${rule.perUnit||rule.value||'?'}`;
-  if(rule.type==='amount_threshold')return`滿$${rule.threshold||'?'}折$${rule.off||'?'}`;
+  if(rule.type==='amount_threshold')return`每滿$${rule.threshold||'?'}折$${rule.off||'?'}`;
   return'';
 }
 
@@ -1195,9 +1195,9 @@ function calcCartItemDiscount(subtotal, totalQty, campaign, promoResult){
     return campDisc+Math.round(perUnit*totalQty);
   }
   if(type==='amount_threshold'){
-    const threshold=parseFloat(cfg.threshold||0);
+    const threshold=parseFloat(cfg.threshold||1);
     const off=parseFloat(cfg.off||0);
-    return campDisc+(afterCamp>=threshold?off:0);
+    return campDisc+Math.floor(afterCamp/threshold)*off;
   }
   return campDisc;
 }
@@ -1558,7 +1558,7 @@ async function applyPromoCode(){
       let label='純追蹤（不改變價格）';
       if(data.discountType==='percent')label=`${fmtDiscount(cfg.value)}優惠`;
       else if(data.discountType==='amount_per_unit')label=`每份折 $${cfg.perUnit||cfg.value||'?'}`;
-      else if(data.discountType==='amount_threshold')label=`滿$${cfg.threshold||'?'}折$${cfg.off||'?'}`;
+      else if(data.discountType==='amount_threshold')label=`每滿$${cfg.threshold||'?'}折$${cfg.off||'?'}`;
       resultEl.innerHTML=`<span style="color:#5dca8a">✅ ${data.name}・${label}</span>`;
       document.getElementById('f-promo').value=data.code;
     }
@@ -1609,9 +1609,9 @@ function calcDiscountedTotal(subtotal, totalQty){
     return Math.max(0,afterCamp-Math.round(perUnit*totalQty));
   }
   if(appliedPromo.discountType==='amount_threshold'){
-    const threshold=parseFloat(cfg.threshold||0);
+    const threshold=parseFloat(cfg.threshold||1);
     const off=parseFloat(cfg.off||0);
-    return afterCamp>=threshold?Math.max(0,afterCamp-off):afterCamp;
+    return Math.max(0,afterCamp-Math.floor(afterCamp/threshold)*off);
   }
   return afterCamp;
 }
@@ -2023,7 +2023,7 @@ function buildOrderPage(){
         let cfg={};try{const dv=d.discountValue;if(typeof dv==='string'&&dv.startsWith('{'))cfg=JSON.parse(dv);else if(typeof dv==='object'&&dv!==null)cfg=dv;else cfg={value:dv};}catch(e){cfg={value:d.discountValue};}
         if(d.discountType==='percent')label=`${fmtDiscount(cfg.value)}優惠`;
         else if(d.discountType==='amount_per_unit')label=`每份折 $${cfg.perUnit||cfg.value||'?'}`;
-        else if(d.discountType==='amount_threshold')label=`滿$${cfg.threshold||'?'}折$${cfg.off||'?'}`;
+        else if(d.discountType==='amount_threshold')label=`每滿$${cfg.threshold||'?'}折$${cfg.off||'?'}`;
         resultEl.innerHTML=`<span style="color:#5dca8a">✅ ${d.name}・${label}</span>`;
         resultEl.style.display='block';
       }
