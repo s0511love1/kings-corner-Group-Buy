@@ -2040,7 +2040,8 @@ async function savePromo(){
   for(const r of promoRules){
     if(!r.campaignId)continue;
     if(dupCheck[r.campaignId]){
-      showToast(`同一團購「${r.campaignId}」只能有一條規則，請移除重複的`,'error');return;
+      const campName=campaigns.find(c=>String(c.id)===String(r.campaignId))?.name||r.campaignId;
+      alert(`❌ 同一團購「${campName}」只能設一條規則。\n\n請移除其中一條重複的規則後再儲存。`);return;
     }
     dupCheck[r.campaignId]=true;
   }
