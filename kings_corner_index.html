@@ -420,7 +420,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 
     <!-- Step 1: 填資料 -->
     <div class="form-card">
-      <div class="form-card-hd"><div class="step-dot">1</div>優惠碼（選填）<span style="font-size:10px;font-weight:400;color:rgba(201,168,76,0.6);letter-spacing:0;text-transform:none;margin-left:6px">※ 每筆訂單限使用一組，可套用多個團購</span></div>
+      <div class="form-card-hd"><div class="step-dot">1</div>優惠碼試算<span style="font-size:10px;font-weight:400;color:rgba(201,168,76,0.6);letter-spacing:0;text-transform:none;margin-left:6px">※ 此處僅預覽折扣，結帳時在購物車統一套用</span></div>
       <div class="field" style="padding:14px 16px">
         <div style="display:flex;gap:8px">
           <input type="text" id="f-promo" placeholder="輸入優惠碼" autocomplete="off" style="flex:1;text-transform:uppercase;font-size:15px"
@@ -875,7 +875,8 @@ function openCampaignForCart(campaignId){
   if(existing?.items){
     existing.items.forEach(i=>{qty[i.id]=i.qty;});
   }
-  // Carry over promo
+  // Carry over promo only if this campaign has existing cart entry with valid promo
+  appliedPromo=null; // 先清空，避免前一個團購的優惠碼污染
   appliedPromo=existing?.promoResult&&!existing.promoResult.error?existing.promoResult:null;
   document.getElementById('home-page').style.display='none';
   document.getElementById('order-page').style.display='block';
@@ -2045,7 +2046,7 @@ function buildOrderPage(){
      <div class="order-chips">
        <span class="order-chip">🏭 ${sup.name}</span>
        <span class="order-chip">📅 截止 ${c.deadline}</span>
-       <span class="order-chip" style="color:#5dca8a">🏷️ 團購限定價</span>
+       ${(()=>{const dr=c.discountRule;if(!dr||dr.type==='none')return'';const lbl=campDiscountLabel(dr);return`<span class="order-chip" style="color:#5dca8a;background:rgba(93,202,138,0.12);border:1px solid rgba(93,202,138,0.3)">🏷️ 團購限定價・${lbl}</span>`})()}
      </div>`;
   document.getElementById('pay-box-area').innerHTML = `<strong>💳 付款方式</strong>${c.note||'請向管理員確認付款方式'}`;
 
@@ -2126,9 +2127,10 @@ function updateCart(){
     const q=qty[p.id]||0;
     if(q>0){total+=q*p.price;totalQty+=q;chips.push(`${p.name.slice(0,5)}×${q}`);}
   });
-  const disc=calcDiscountedTotal(total,totalQty);
+  const campDisc=applyCampDiscountRule(total,totalQty,currentCampaign?.discountRule||null);
+  const baseDisc=total-campDisc; // 團購折後價
+  const disc=appliedPromo&&!appliedPromo.error?(total-calcDiscountedTotal(total,totalQty)+baseDisc):baseDisc;
   // Show savings breakdown
-  const baseDisc=Math.round(total*(currentCampaign?.discount||100)/100);
   const promoSaving=baseDisc-disc;
   const savingsEl=document.getElementById('cart-savings');
   if(savingsEl){
@@ -2136,15 +2138,33 @@ function updateCart(){
       const campLbl=campDiscountLabel(currentCampaign?.discountRule)||'';
       savingsEl.innerHTML=`原價 <s style="color:#aaa">$${total.toLocaleString()}</s> → 團購${campLbl?'（'+campLbl+'）':''} <strong style="color:var(--gold)">$${baseDisc.toLocaleString()}</strong> → 優惠碼再省 <strong style="color:#5dca8a">$${promoSaving.toLocaleString()}</strong>`;
       savingsEl.style.display='block';
-    } else if(total>0){
+    } else if(total>0&&campDisc>0){
       const campLbl2=campDiscountLabel(currentCampaign?.discountRule)||'';
-      savingsEl.innerHTML=`原價 <s style="color:#aaa">$${total.toLocaleString()}</s> → 團購${campLbl2?'（'+campLbl2+'）':''} <strong style="color:var(--gold)">$${baseDisc.toLocaleString()}</strong>（省 $${(total-baseDisc).toLocaleString()}）`;
-      savingsEl.style.display=total>baseDisc?'block':'none';
+      savingsEl.innerHTML=`原價 <s style="color:#aaa">$${total.toLocaleString()}</s> → 團購${campLbl2?'（'+campLbl2+'）':''} <strong style="color:var(--gold)">$${baseDisc.toLocaleString()}</strong>（省 $${campDisc.toLocaleString()}）<span style="font-size:10px;color:#aaa">· 優惠碼在購物車套用</span>`;
+      savingsEl.style.display='block';
     } else {
       savingsEl.style.display='none';
     }
   }
-  document.getElementById('cart-total').textContent=disc.toLocaleString();
+  // 底部 bar 顯示：無優惠碼時顯示團購折後價 + 「優惠碼另計」提示
+  const totalEl=document.getElementById('cart-total');
+  const totalWrap=totalEl?.parentElement;
+  if(totalEl){
+    totalEl.textContent=baseDisc.toLocaleString();
+    const hint=totalWrap?.querySelector('.promo-hint');
+    if(campDisc>0&&!appliedPromo){
+      if(!hint){
+        const sp=document.createElement('span');
+        sp.className='promo-hint';
+        sp.style.cssText='font-size:10px;color:#aaa;font-family:\'Noto Sans TC\',sans-serif;font-weight:400;display:block;line-height:1.2';
+        sp.textContent='優惠碼另計';
+        totalWrap?.appendChild(sp);
+      }
+    } else {
+      hint?.remove();
+      totalEl.textContent=disc.toLocaleString();
+    }
+  }
   document.getElementById('cart-chips').innerHTML=
     chips.slice(0,4).map(ch=>`<span class="cart-chip-item">${ch}</span>`).join('')+
     (chips.length>4?`<span class="cart-chip-item">+${chips.length-4}</span>`:'');
