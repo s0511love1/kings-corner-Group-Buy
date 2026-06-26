@@ -2035,9 +2035,14 @@ function openEditPromo(id){
   document.getElementById('modal-promo').classList.add('show');
 }
 async function savePromo(){
+  // 先同步 DOM 的下拉選單值到 editingRules
+  editingRules.forEach((r,i)=>{
+    const sel=document.getElementById(`rule-camp-${i}`);
+    if(sel&&sel.value)editingRules[i].campaignId=sel.value;
+  });
   // 驗證：同一 campaignId 不能有重複規則
   const dupCheck={};
-  for(const r of promoRules){
+  for(const r of editingRules){
     if(!r.campaignId)continue;
     if(dupCheck[r.campaignId]){
       const campName=campaigns.find(c=>String(c.id)===String(r.campaignId))?.name||r.campaignId;
