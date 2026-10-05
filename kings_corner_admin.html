@@ -466,6 +466,12 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <textarea id="c-note" placeholder="付款方式說明…"></textarea>
       </div>
       <div class="ff">
+        <label>菜單圖片（選填，最多 6 張）</label>
+        <div style="font-size:11px;color:var(--faint);margin-bottom:8px">每行貼一個網址。支援 Google Drive 分享連結（需設為「知道連結的任何人可檢視」）、Imgur、直接圖片網址。客人在點餐頁旁邊會看到，點擊可放大。</div>
+        <textarea id="c-menu-images" placeholder="https://drive.google.com/file/d/xxxx/view&#10;https://i.imgur.com/xxxx.jpg" oninput="previewMenuImages()" style="min-height:70px;font-size:12px"></textarea>
+        <div id="c-menu-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
+      </div>
+      <div class="ff">
         <label>開放優惠碼（白名單）</label>
         <div style="font-size:11px;color:var(--faint);margin-bottom:8px">勾選哪些優惠碼可在此團購使用，不勾選則全部不可用</div>
         <div id="c-allowed-codes" style="display:flex;flex-wrap:wrap;gap:8px;background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:44px"></div>
@@ -1142,6 +1148,7 @@ function openNewCampaign(){
   document.getElementById('c-min').value='10';document.getElementById('c-discount-type').value='none';onDiscountTypeChange();document.getElementById('c-status').value='active';
   populateCampaignSel('c-supplier-sel');document.getElementById('prod-rows').innerHTML='';
   populateAllowedCodes([]);
+  setMenuImagesField('');
   loadNoteTemplates();
   document.getElementById('camp-link-section').style.display='none';
   onCampStatusChange();
@@ -1167,6 +1174,7 @@ function editCampaign(id){
   (c.products||[]).forEach(p=>addProdRow(p.name,p.price,p.stock));
   let allowedCodes=[];try{allowedCodes=JSON.parse(c.allowedCodes||'[]');}catch(e){}
   populateAllowedCodes(allowedCodes);
+  setMenuImagesField(c.menuImages);
   // Load closedStatus and pickupDate
   const csEl=document.getElementById('c-closed-status');
   const pdEl=document.getElementById('c-pickup-date');
@@ -1265,6 +1273,38 @@ function addProdRow(name='',price='',stock=''){
     <button class="del-row" onclick="this.parentElement.remove()">×</button>`;
   document.getElementById('prod-rows').appendChild(div);
 }
+
+// ── 菜單圖片 ──
+function menuImgUrl(u, w){
+  u = String(u||'').trim(); if(!u) return '';
+  const m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=|thumbnail\?id=)([\w-]{20,})/);
+  if(m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w' + (w||1600);
+  if(/^https?:\/\/imgur\.com\/\w+$/.test(u)) return u.replace('://imgur.com','://i.imgur.com') + '.jpg';
+  return u;
+}
+function parseMenuImages(v){
+  let arr = v;
+  if(typeof v === 'string'){
+    const t = v.trim(); if(!t) return [];
+    try{ arr = JSON.parse(t); }catch(e){ arr = t.split(/[\n,]+/); }
+  }
+  return Array.isArray(arr) ? arr.map(x=>String(x||'').trim()).filter(Boolean) : [];
+}
+function setMenuImagesField(v){
+  const el=document.getElementById('c-menu-images'); if(!el) return;
+  el.value = parseMenuImages(v).join('\n'); previewMenuImages();
+}
+function getMenuImagesField(){
+  const el=document.getElementById('c-menu-images'); if(!el) return [];
+  return el.value.split('\n').map(x=>x.trim()).filter(x=>/^https?:\/\//.test(x));
+}
+function previewMenuImages(){
+  const box=document.getElementById('c-menu-preview'); if(!box) return;
+  const list=getMenuImagesField();
+  box.innerHTML = list.slice(0,6).map((u,i)=>`<a href="${menuImgUrl(u,2000)}" target="_blank" rel="noopener" title="第 ${i+1} 張" style="display:block;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--border);background:var(--dark3)">
+      <img src="${menuImgUrl(u,200)}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'⚠ 無法載入',style:'font-size:10px;color:#ff8080;padding:20px 4px;text-align:center'}))">
+    </a>`).join('') + (list.length>6?`<div style="font-size:11px;color:#ff8080;align-self:center">超過 6 張，只會儲存前 6 張</div>`:'');
+}
 async function saveCampaign(){
   const name=document.getElementById('c-name').value.trim();if(!name){showToast('請輸入團購名稱','error');return;}
   const deadline=document.getElementById('c-deadline').value;if(!deadline){showToast('請選擇截止日期','error');return;}
@@ -1284,7 +1324,8 @@ async function saveCampaign(){
     pickupDate:document.getElementById('c-pickup-date')?.value||'',
     note:document.getElementById('c-note').value.trim(),
     products:prods,
-    allowedCodes:JSON.stringify(allowedCodes)};
+    allowedCodes:JSON.stringify(allowedCodes),
+    menuImages:JSON.stringify(getMenuImagesField().slice(0,6))};
   console.log('Saving campaign id:', campId, 'editCampaignId:', editCampaignId);
   loading(true,'儲存中…');
   try{
@@ -1592,6 +1633,7 @@ function reopenCampaign(id){
   let allowedCodes=[];
   try{allowedCodes=JSON.parse(c.allowedCodes||'[]');}catch(e){}
   populateAllowedCodes(allowedCodes);
+  setMenuImagesField(c.menuImages);
   loadNoteTemplates();
   // Jump to step 3 (confirm) so user can review, but go back to step 1 first
   pickerSelectedIds=new Set();

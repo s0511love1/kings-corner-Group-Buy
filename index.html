@@ -218,6 +218,38 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 .marquee-track{display:flex;width:max-content;animation:marquee 30s linear infinite;will-change:transform}
 .marquee-track:hover{animation-play-state:paused}
 @media(prefers-reduced-motion:reduce){.marquee-track{animation-duration:60s}}
+/* ══ 菜單圖片 ══ */
+.order-wrap{max-width:960px;margin:0 auto}
+.order-wrap .order-main{max-width:none;margin:0}
+.menu-aside{display:none}
+.menu-card{background:var(--white);border-radius:var(--radius);overflow:hidden;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.menu-strip{display:flex;gap:10px;overflow-x:auto;padding:12px 16px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.menu-thumb{flex:0 0 auto;height:150px;border-radius:8px;overflow:hidden;border:1px solid #e8e4e0;background:#f2eee8;cursor:zoom-in;scroll-snap-align:start;position:relative;padding:0}
+.menu-thumb img{height:100%;width:auto;display:block;min-width:100px;object-fit:cover}
+.menu-thumb .menu-idx{position:absolute;right:6px;bottom:6px;background:rgba(18,16,14,0.75);color:var(--gold);font-size:10px;padding:2px 7px;border-radius:10px}
+.menu-hint{font-size:10px;font-weight:400;color:rgba(201,168,76,0.6);letter-spacing:0;text-transform:none;margin-left:auto}
+.menu-aside-list{display:flex;flex-direction:column;gap:10px;padding:12px}
+.menu-aside-list .menu-thumb{height:auto;width:100%}
+.menu-aside-list .menu-thumb img{width:100%;height:auto;min-width:0}
+@media(min-width:1240px){
+  .order-wrap.has-menu{max-width:1300px;display:flex;gap:20px;padding:0 16px;align-items:flex-start}
+  .order-wrap.has-menu .order-main{flex:1;min-width:0;max-width:960px;padding-left:0;padding-right:0}
+  .order-wrap.has-menu .menu-aside{display:block;width:300px;flex-shrink:0;position:sticky;top:16px;margin-top:18px;max-height:calc(100vh - 120px);overflow-y:auto}
+  .order-wrap.has-menu #menu-inline{display:none!important}
+}
+/* Lightbox */
+#menu-lb{position:fixed;inset:0;z-index:9999;background:rgba(10,9,8,0.94);display:none;flex-direction:column}
+#menu-lb.show{display:flex}
+.lb-top{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;color:var(--gold);font-size:13px;flex-shrink:0}
+.lb-btn{background:rgba(255,255,255,0.08);border:1px solid rgba(201,168,76,0.4);color:var(--gold);border-radius:8px;padding:6px 12px;font-size:14px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;touch-action:manipulation}
+.lb-stage{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;position:relative;-webkit-overflow-scrolling:touch}
+.lb-stage img{max-width:100%;max-height:100%;object-fit:contain;cursor:zoom-in;user-select:none;-webkit-user-drag:none}
+.lb-stage.zoomed{display:block}
+.lb-stage.zoomed img{max-width:none;max-height:none;width:auto;cursor:zoom-out}
+.lb-nav{position:fixed;top:50%;transform:translateY(-50%);width:44px;height:64px;font-size:26px;display:flex;align-items:center;justify-content:center;z-index:2}
+.lb-prev{left:8px}.lb-next{right:8px}
+.lb-foot{text-align:center;font-size:11px;color:#aaa;padding:8px 0 14px;flex-shrink:0}
+
 @media(max-width:640px){.marquee-track{animation-duration:18s}}
 .marquee-track span{font-size:11px;color:var(--muted-dark);padding:0 32px;white-space:nowrap}
 .marquee-track span strong{color:var(--gold)}
@@ -402,7 +434,8 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 
 <!-- ORDER PAGE -->
 <div id="order-page">
-  <div class="main" style="padding-top:18px;padding-bottom:140px">
+ <div class="order-wrap" id="order-wrap">
+  <div class="main order-main" style="padding-top:18px;padding-bottom:140px">
     <button class="back-btn" onclick="goHome()">← 回到首頁</button>
     <div class="order-top" id="order-top"></div>
     <div class="cd-strip">
@@ -416,6 +449,12 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
         <span class="cu-sep">:</span>
         <div class="cu"><span class="cu-num" id="cd-s">--</span><span class="cu-lbl">秒</span></div>
       </div>
+    </div>
+
+    <!-- 菜單圖片（窄螢幕：橫向縮圖列） -->
+    <div class="menu-card" id="menu-inline" style="display:none">
+      <div class="form-card-hd">📋 菜單<span class="menu-hint">點圖可放大</span></div>
+      <div class="menu-strip" id="menu-strip"></div>
     </div>
 
     <!-- Step 1: 填資料 -->
@@ -441,6 +480,12 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
     <div class="pay-box" id="pay-box-area"></div>
     <div class="notice-box">⚠️ 重量誤差 ±5%，請確保收件地址可冷凍收貨。訂單送出後如需修改請私訊群組管理員。</div>
   </div>
+  <!-- 菜單圖片（寬螢幕：右側固定欄） -->
+  <aside class="menu-aside menu-card" id="menu-aside">
+    <div class="form-card-hd">📋 菜單<span class="menu-hint">點圖可放大</span></div>
+    <div class="menu-aside-list" id="menu-aside-list"></div>
+  </aside>
+ </div>
 
   <!-- Savings display -->
 <div id="cart-savings" style="display:none;position:fixed;bottom:80px;left:0;right:0;background:var(--dark2);border-top:1px solid var(--border);padding:8px 16px;font-size:12px;color:var(--text-dark);text-align:center;z-index:199;line-height:1.6"></div>
@@ -452,6 +497,21 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
     </div>
     <button class="submit-btn" id="submit-btn" onclick="addCurrentToCart()">🛒 加入購物車</button>
   </div>
+</div>
+
+<!-- 菜單燈箱 -->
+<div id="menu-lb" onclick="if(event.target===this)closeMenuLb()">
+  <div class="lb-top">
+    <span id="lb-count">1 / 1</span>
+    <div style="display:flex;gap:8px">
+      <button class="lb-btn" onclick="toggleLbZoom()" id="lb-zoom-btn">🔍 放大</button>
+      <button class="lb-btn" onclick="closeMenuLb()">✕ 關閉</button>
+    </div>
+  </div>
+  <div class="lb-stage" id="lb-stage"><img id="lb-img" alt="菜單" onclick="toggleLbZoom()"></div>
+  <button class="lb-btn lb-nav lb-prev" id="lb-prev" onclick="lbGo(-1)">‹</button>
+  <button class="lb-btn lb-nav lb-next" id="lb-next" onclick="lbGo(1)">›</button>
+  <div class="lb-foot">點圖片切換放大・左右滑動換頁・Esc 關閉</div>
 </div>
 
 <!-- SUCCESS -->
@@ -687,36 +747,8 @@ function buildMarquee(){
 // adImage     : 廣告海報圖 URL（貼上圖片直連網址）
 // bannerImage : Header 橫幅圖 URL
 // adTitle/adSub: 沒有圖片時顯示的文字海報
-const SUPPLIERS = [
-  {
-    id:1, name:'初雞', cat:'肉品',
-    note:'冷凍舒肥雞胸肉、雞腿排、雞湯系列',
-    bannerImage:'',
-    // slides: 廣告輪播，由 admin 後台管理後同步至此
-    // 每張: { img, title, sub, link }
-    slides:[
-      {img:'',title:'初雞 5月新品',sub:'泰式酸辣雞胸全新上市 · 限量搶購',link:''},
-      {img:'',title:'初雞 鮮嫩雞腿排',sub:'蔥鹽/味噌 兩種口味 限時優惠',link:''},
-    ]
-  },
-  {
-    id:2, name:'美律', cat:'3C',
-    note:'耳機、音響、藍牙配件',
-    bannerImage:'',
-    slides:[
-      {img:'',title:'美律春季特賣',sub:'藍牙耳機最高 9折 · 數量有限',link:''},
-    ]
-  },
-  {
-    id:3, name:'逢國食品', cat:'零食／調味品',
-    note:'RICHY、韓國CJ、海底撈等進口食品',
-    bannerImage:'',
-    slides:[
-      {img:'',title:'逢國食品 嚴選',sub:'進口好物 · 每月精選開團',link:''},
-      {img:'',title:'韓國CJ 新到貨',sub:'芝麻油・辣椒醬・午餐肉 三款熱銷',link:''},
-    ]
-  },
-];
+// 由 GAS 載入（不再內建示範資料，避免連線失敗或無團購時顯示假團購）
+const SUPPLIERS = [];
 
 // ══ 商品圖片庫（做法 B：貼圖片 URL）══
 // key = 商品名稱（完整或部分），value = 圖片 URL
@@ -741,38 +773,100 @@ const CAT_EMOJI = {
 };
 
 // ══ 團購資料 ══
-const CAMPAIGNS = [
-  {id:1, name:'初雞 202603 團購', supplierId:1, deadline:'2026-03-20', orders:18,
-   minPeople:10, discount:86, status:'closed',
-   note:'匯款：玉山銀行 808-123-456789 戶名：Timmy 王〇〇',
-   products:[
-     {id:'b1',name:'鹽味雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
-     {id:'b2',name:'味噌雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
-     {id:'b3',name:'蔥鹽雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
-   ]},
-  {id:2, name:'初雞 202604 團購', supplierId:1, deadline:'2026-04-15', orders:4,
-   minPeople:10, discount:86, status:'active',
-   note:'匯款：玉山銀行 808-123-456789 或 LINE Pay @timmygroup',
-   products:[
-     {id:'c1',name:'鹽味雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
-     {id:'c2',name:'蔥鹽雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
-     {id:'c3',name:'泰式酸辣雞胸',cat:'雞胸肉',price:70,spec:'180g ±5%',img:''},
-     {id:'c4',name:'義式香草雞胸',cat:'雞胸肉',price:75,spec:'180g ±5%',img:''},
-     {id:'c5',name:'韓式泡菜雞胸',cat:'雞胸肉',price:75,spec:'180g ±5%',img:''},
-     {id:'c6',name:'蔥鹽雞腿排',cat:'雞腿排',price:85,spec:'160g ±5%',img:''},
-     {id:'c7',name:'味噌雞腿排',cat:'雞腿排',price:85,spec:'160g ±5%',img:''},
-     {id:'c8',name:'蜜汁雞翅',cat:'雞翅',price:110,spec:'260g ±5%',img:''},
-     {id:'c9',name:'黑蒜頭雞湯',cat:'雞湯',price:180,spec:'大包 1300g ±5%',img:''},
-     {id:'c10',name:'人參雞湯',cat:'雞湯',price:180,spec:'大包 1300g ±5%',img:''},
-   ]},
-  {id:3, name:'美律耳機 202604 團購', supplierId:2, deadline:'2026-04-30', orders:1,
-   minPeople:5, discount:90, status:'active',
-   note:'匯款後 7 工作天出貨',
-   products:[
-     {id:'d1',name:'ENC降噪耳機',cat:'耳機',price:890,spec:'含充電盒',img:''},
-     {id:'d2',name:'藍牙運動耳機',cat:'耳機',price:1290,spec:'IPX5防水',img:''},
-   ]},
-];
+const CAMPAIGNS = [];
+
+
+// ══ 菜單圖片 ══
+// 支援 Google Drive 分享連結 / Imgur 頁面 / 直接圖片網址
+function menuImgUrl(u, w){
+  u = String(u||'').trim(); if(!u) return '';
+  const m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=|thumbnail\?id=)([\w-]{20,})/);
+  if(m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w' + (w||1600);
+  if(/^https?:\/\/imgur\.com\/\w+$/.test(u)) return u.replace('://imgur.com','://i.imgur.com') + '.jpg';
+  return u;
+}
+function parseMenuImages(v){
+  let arr = v;
+  if(typeof v === 'string'){
+    const t = v.trim(); if(!t) return [];
+    try{ arr = JSON.parse(t); }catch(e){ arr = t.split(/[\n,]+/); }
+  }
+  return Array.isArray(arr) ? arr.map(x=>String(x||'').trim()).filter(Boolean) : [];
+}
+let MENU_LB = { list:[], i:0 };
+function renderMenuImages(c){
+  const list = parseMenuImages(c && c.menuImages);
+  const wrap = document.getElementById('order-wrap');
+  const inline = document.getElementById('menu-inline');
+  MENU_LB.list = list;
+  if(!list.length){
+    wrap.classList.remove('has-menu'); inline.style.display='none';
+    document.getElementById('menu-strip').innerHTML=''; document.getElementById('menu-aside-list').innerHTML='';
+    return;
+  }
+  const thumb = (u,i,w) => `<button type="button" class="menu-thumb" onclick="openMenuLb(${i})" aria-label="放大菜單第 ${i+1} 張">
+      <img src="${menuImgUrl(u,w)}" alt="菜單 ${i+1}" loading="lazy" onerror="this.closest('.menu-thumb').style.display='none'">
+      ${list.length>1?`<span class="menu-idx">${i+1}/${list.length}</span>`:''}</button>`;
+  document.getElementById('menu-strip').innerHTML = list.map((u,i)=>thumb(u,i,400)).join('');
+  document.getElementById('menu-aside-list').innerHTML = list.map((u,i)=>thumb(u,i,700)).join('');
+  inline.style.display='block';
+  wrap.classList.add('has-menu');
+}
+function openMenuLb(i){
+  if(!MENU_LB.list.length) return;
+  MENU_LB.i = i; showLbImg();
+  document.getElementById('menu-lb').classList.add('show');
+  document.body.style.overflow='hidden';
+}
+function closeMenuLb(){
+  document.getElementById('menu-lb').classList.remove('show');
+  document.getElementById('lb-stage').classList.remove('zoomed');
+  document.body.style.overflow='';
+}
+function showLbImg(){
+  const n = MENU_LB.list.length;
+  const stage = document.getElementById('lb-stage');
+  stage.classList.remove('zoomed'); stage.scrollTo(0,0);
+  document.getElementById('lb-zoom-btn').textContent='🔍 放大';
+  document.getElementById('lb-img').src = menuImgUrl(MENU_LB.list[MENU_LB.i], 2000);
+  document.getElementById('lb-count').textContent = (MENU_LB.i+1) + ' / ' + n;
+  document.getElementById('lb-prev').style.display = n>1 ? 'flex':'none';
+  document.getElementById('lb-next').style.display = n>1 ? 'flex':'none';
+}
+function lbGo(d){
+  const n = MENU_LB.list.length; if(n<2) return;
+  MENU_LB.i = (MENU_LB.i + d + n) % n; showLbImg();
+}
+function toggleLbZoom(){
+  const stage = document.getElementById('lb-stage');
+  const img = document.getElementById('lb-img');
+  const zoomed = stage.classList.toggle('zoomed');
+  if(zoomed){
+    // 放大為容器寬度的 2 倍（不超過原圖寬度太多）
+    img.style.width = Math.max(stage.clientWidth*2, Math.min(img.naturalWidth||0, stage.clientWidth*3)) + 'px';
+    requestAnimationFrame(()=>{ stage.scrollLeft = (stage.scrollWidth-stage.clientWidth)/2; });
+  } else { img.style.width=''; }
+  document.getElementById('lb-zoom-btn').textContent = zoomed ? '↩ 縮小' : '🔍 放大';
+}
+document.addEventListener('keydown', e=>{
+  if(!document.getElementById('menu-lb')?.classList.contains('show')) return;
+  if(e.key==='Escape') closeMenuLb();
+  else if(e.key==='ArrowLeft') lbGo(-1);
+  else if(e.key==='ArrowRight') lbGo(1);
+});
+(function(){
+  let sx=null, sy=null;
+  document.addEventListener('touchstart', e=>{
+    const st=document.getElementById('lb-stage');
+    if(!st||!st.contains(e.target)||st.classList.contains('zoomed')||e.touches.length>1){sx=null;return;}
+    sx=e.touches[0].clientX; sy=e.touches[0].clientY;
+  }, {passive:true});
+  document.addEventListener('touchend', e=>{
+    if(sx===null) return;
+    const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy; sx=null;
+    if(Math.abs(dx)>50 && Math.abs(dx)>Math.abs(dy)*1.5) lbGo(dx<0?1:-1);
+  }, {passive:true});
+})();
 
 // ══ 圖片匹配邏輯 ══
 function resolveProductImg(p) {
@@ -1681,6 +1775,7 @@ function renderQueryResults(orders){
 // ── INIT ──
 const GAS_URL = localStorage.getItem('kc_gas_url') || 'https://script.google.com/macros/s/AKfycbyPIWjmKomnT0WNBOhABsZjvHXN0B4tiUpAn7V2zAc5SYTJJrtGu5on1TE57rA6zhcz/exec';
 
+let GAS_LOAD_STATE = 'pending';
 async function init(){
   document.getElementById('header-date').textContent = new Date().toLocaleDateString('zh-TW');
   if(SITE_CONFIG.pageBgImage) document.documentElement.style.setProperty('--page-bg-img',`url('${SITE_CONFIG.pageBgImage}')`);
@@ -1689,6 +1784,7 @@ async function init(){
     try{
       const res = await fetch(GAS_URL + '?action=getCampaigns');
       const data = await res.json();
+      if(data.status !== 'ok') GAS_LOAD_STATE = 'fail';
       if(data.status === 'ok'){
         // Merge GAS data with local config
         if(data.suppliers && data.suppliers.length){
@@ -1701,10 +1797,10 @@ async function init(){
           SUPPLIERS.length = 0;
           data.suppliers.forEach(s => SUPPLIERS.push(s));
         }
-        if(data.campaigns && data.campaigns.length){
-          CAMPAIGNS.length = 0;
-          data.campaigns.forEach(c => CAMPAIGNS.push(c));
-        }
+        // 以 GAS 為準：即使 0 筆也要覆蓋（不可保留舊資料）
+        CAMPAIGNS.length = 0;
+        (data.campaigns || []).forEach(c => CAMPAIGNS.push(c));
+        GAS_LOAD_STATE = 'ok';
         if(data.closedCamps){ CLOSED_CAMPS = data.closedCamps; }
         // Sync ads from GAS
         if(data.ads){
@@ -1727,7 +1823,7 @@ async function init(){
           if(m.campaignBoost){ try{ MKT.campaignBoost = JSON.parse(m.campaignBoost); }catch(e){} }
         }
       }
-    }catch(e){ console.warn('GAS 載入失敗，使用靜態資料', e); }
+    }catch(e){ GAS_LOAD_STATE = 'fail'; console.warn('GAS 載入失敗', e); }
   }
 
   loadCartFromStorage();buildSupTabs();updateCartBadge();
@@ -1798,7 +1894,9 @@ function renderHome(){
   });
   document.getElementById('active-grid').innerHTML = active.length
     ? activeWithCounts.map(c=>{ try{ return campCardHtml(c,activeWithCounts,maxOrders); }catch(e){ console.error('card error',c.id,e); return ''; } }).join('')
-    : `<div style="color:#aaa;font-size:13px;padding:6px 0">目前沒有進行中的團購</div>`;
+    : (GAS_LOAD_STATE==='fail'
+        ? `<div style="color:#c8272d;font-size:13px;padding:6px 0">⚠️ 團購資料載入失敗，請稍後重新整理頁面</div>`
+        : `<div style="color:#aaa;font-size:13px;padding:6px 0">目前沒有進行中的團購</div>`);
   document.getElementById('closed-label').style.display = 'none'; // hide old closed section
   document.getElementById('closed-grid').innerHTML = '';
   try{ renderClosedProgress(); }catch(e){ console.error('closedProgress error:',e); }
@@ -2056,6 +2154,7 @@ function buildOrderPage(){
        ${(()=>{const dr=c.discountRule;if(!dr||dr.type==='none')return'';const lbl=campDiscountLabel(dr);return`<span class="order-chip" style="color:#5dca8a;background:rgba(93,202,138,0.12);border:1px solid rgba(93,202,138,0.3)">🏷️ 團購限定價・${lbl}</span>`})()}
      </div>`;
   document.getElementById('pay-box-area').innerHTML = `<strong>💳 付款方式</strong>${c.note||'請向管理員確認付款方式'}`;
+  try{ renderMenuImages(c); }catch(e){ console.error('menu images error', e); }
 
   // Normalize product cat - replace undefined/empty with '未分類'
   c.products.forEach(p=>{ if(!p.cat||p.cat==='undefined'||p.cat.trim()==='') p.cat='未分類'; });
