@@ -854,7 +854,7 @@ function statusBadge(s,c){
 }
 function daysLeft(deadline,status){
   if(status!=='active')return'';
-  const diffMs=new Date(deadline)-new Date();
+  const diffMs=new Date(deadline+'T23:59:59')-new Date();
   const d=Math.ceil(diffMs/(1000*86400));
   if(diffMs<=0)return'<span style="font-size:11px;color:var(--faint)">已截止</span>';
   if(d===0)return'<span style="font-size:11px;color:#ff8080">今天截止</span>';

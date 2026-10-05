@@ -668,7 +668,7 @@ function buildMarquee(){
   }
   // Dynamic: upcoming deadlines
   CAMPAIGNS.filter(c=>c.status==='active').forEach(c=>{
-    const days=Math.ceil((new Date(c.deadline)-new Date())/(1000*86400));
+    const days=Math.ceil((new Date(c.deadline+'T23:59:59')-new Date())/(1000*86400));
     if(days<=5&&days>0)parts.push(`<span>⏰ <strong>${c.name}</strong> 還剩 ${days} 天截止</span>`);
   });
   // Dynamic: recent names from active campaigns
@@ -868,6 +868,10 @@ function addToCart(campaignId){
 function openCampaignForCart(campaignId){
   const c=CAMPAIGNS.find(x=>String(x.id)===String(campaignId));
   if(!c||c.status!=='active')return;
+  if(c.deadline){
+    const diffMs=new Date(c.deadline+'T23:59:59')-new Date();
+    if(diffMs<=0){ showOrderToast('此團購已截止下單','error'); renderHome(); return; }
+  }
   currentCampaign=c;
   // Pre-fill qty from existing cart entry if any
   const existing=cart[campaignId];
@@ -1895,17 +1899,20 @@ function prevSlide(){ goToSlide((carouselCurrent-1+carouselSlides.length) % caro
 
 function campCardHtml(c, allActive, maxOrders){
   const sup = SUPPLIERS.find(s=>String(s.id)===String(c.supplierId))||{name:'—'};
-  const isActive = c.status==='active';
+  const isStatusActive = c.status==='active';
 
   // ── Deadline: show hours if ≤2 days ──
   const diffMs = new Date(c.deadline+'T23:59:59') - new Date();
   const diffH = Math.max(0, Math.floor(diffMs/3600000));
   const diffD = Math.floor(diffH/24);
   const remH = diffH % 24;
+  const isExpired = !!c.deadline && c.deadline!=='undefined' && diffMs<=0;
+  // canOrder：狀態為進行中「且」尚未過截止日（防止 GAS 自動關閉尚未執行的空窗期仍可下單）
+  const isActive = isStatusActive && !isExpired;
   let daysHtml = '<span class="days-pill days-ok" style="opacity:0.3">—</span>';
   if(!c.deadline || c.deadline==='undefined'){
     daysHtml = '<span class="days-pill days-ok" style="opacity:0.3">—</span>';
-  } else if(isActive && diffMs > 0){
+  } else if(isStatusActive && diffMs > 0){
     if(diffD === 0){
       daysHtml = `<span class="days-pill days-urgent">🔴 剩 ${diffH} 小時！</span>`;
     } else if(diffD <= 2){
@@ -1915,7 +1922,7 @@ function campCardHtml(c, allActive, maxOrders){
     } else {
       daysHtml = `<span class="days-pill days-ok">剩 ${diffD} 天</span>`;
     }
-  } else if(isActive && diffMs <= 0){
+  } else if(isStatusActive && diffMs <= 0){
     daysHtml = '<span class="days-pill days-urgent">已截止</span>';
   }
 
