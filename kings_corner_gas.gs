@@ -110,6 +110,11 @@ function jsonOut(obj) {
 }
 
 // 讀取工作表 → [{col:val, ...}, ...]
+// 名稱正規化：全形轉半形、去除所有空白、英文轉小寫（用於重複比對）
+function normName(s) {
+  return String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+}
+
 function sheetToObjects(name) {
   const sheet = ss().getSheetByName(name);
   if (!sheet) return [];
@@ -425,6 +430,22 @@ function getCampaignsPublic() {
       try { c.menuImages = JSON.parse(c.menuImages || '[]'); } catch(e) { c.menuImages = []; }
       return c;
     });
+
+  // 團購商品若缺分類／規格／圖片，從商品庫補上（以「廠商＋商品名稱」比對）
+  const libProds = sheetToObjects(SH.PRODUCTS);
+  active.forEach(c => {
+    c.products = (c.products || []).map(p => {
+      if (p.cat && p.spec !== undefined && p.img) return p;
+      const lib = libProds.find(l => String(l.supplierId) === String(c.supplierId) && normName(l.name) === normName(p.name))
+               || libProds.find(l => normName(l.name) === normName(p.name));
+      if (!lib) return p;
+      return Object.assign({}, p, {
+        cat:  p.cat  || lib.cat  || '',
+        spec: p.spec || lib.spec || '',
+        img:  p.img  || lib.img  || '',
+      });
+    });
+  });
 
   const suppliers = sheetToObjects(SH.SUPPLIERS);
   const adsRaw = sheetToObjects(SH.ADS);
@@ -750,6 +771,17 @@ function importProducts(body, user) {
     }
   });
 
+  // 以「廠商＋商品名稱」（忽略空白、全半形、大小寫）判斷重複
+  const keyOf = (sid, name) => String(sid) + '::' + normName(name);
+  const seen = {};
+  const dupInBatch = [];
+  products.forEach(p => {
+    const k = keyOf(p.supplierId, p.name);
+    if (seen[k]) dupInBatch.push(p.supplierName ? p.supplierName + '／' + p.name : p.name);
+    seen[k] = true;
+  });
+  if (dupInBatch.length) return err('匯入資料內有重複的「廠商＋商品」：' + dupInBatch.join('、'));
+
   const headers = ['id','supplierId','name','cat','spec','price','img','active'];
   const sheet = ensureSheet(SH.PRODUCTS, headers);
 
@@ -764,9 +796,9 @@ function importProducts(body, user) {
   if (mode === 'replace_supplier') {
     // Deactivate products of affected suppliers not in this import
     const affectedSupIds = [...new Set(products.map(p => p.supplierId))];
-    const csvNames = new Set(products.map(p => p.supplierId + '::' + p.name));
+    const csvNames = new Set(products.map(p => keyOf(p.supplierId, p.name)));
     existing.forEach(p => {
-      if (affectedSupIds.includes(p.supplierId) && !csvNames.has(p.supplierId + '::' + p.name)) {
+      if (affectedSupIds.map(String).includes(String(p.supplierId)) && !csvNames.has(keyOf(p.supplierId, p.name))) {
         p.active = 'false';
         upsertRow(SH.PRODUCTS, headers, p, 'id');
         deactivated++;
@@ -774,12 +806,16 @@ function importProducts(body, user) {
     });
   }
 
+  const exMap = {};
+  existing.forEach(e => { const k = keyOf(e.supplierId, e.name); if (!exMap[k]) exMap[k] = e; });
   products.forEach(p => {
-    if (!p.id) p.id = 'P' + new Date().getTime() + Math.random().toString(36).slice(2,6);
-    const ex = existing.find(e => e.supplierId === p.supplierId && e.name === p.name);
-    if (ex) { p.id = ex.id; updated++; } else { added++; }
+    const ex = exMap[keyOf(p.supplierId, p.name)];
+    if (ex) { p.id = ex.id; updated++; }
+    else { p.id = 'P' + new Date().getTime() + Math.random().toString(36).slice(2,6); added++; }
     p.active = 'true';
-    upsertRow(SH.PRODUCTS, headers, p, 'id');
+    const rec = { id: p.id, supplierId: p.supplierId, name: String(p.name).trim(), cat: p.cat || '', spec: p.spec || '', price: p.price, img: p.img || (ex && ex.img) || '', active: 'true' };
+    upsertRow(SH.PRODUCTS, headers, rec, 'id');
+    exMap[keyOf(p.supplierId, p.name)] = rec;
   });
 
   return ok({ added, updated, deactivated });
@@ -1094,8 +1130,10 @@ function validatePromoCode(code, campaignId) {
     if (camp) {
       let allowedCodes = [];
       try { allowedCodes = JSON.parse(camp.allowedCodes || '[]'); } catch(e) {}
-      const isWhitelisted = allowedCodes.map(c=>c.toUpperCase()).includes(promo.code.toUpperCase());
-      if (!isWhitelisted) {
+      const isWhitelisted = allowedCodes.map(c=>String(c).toUpperCase()).includes(promo.code.toUpperCase());
+      // 優惠碼裡已為此團購設定「專屬規則」＝視同開放（避免只改優惠碼、忘了改團購白名單而失效）
+      const hasOwnRule = campaignRules.some(r => String(r.campaignId) === String(campaignId));
+      if (!isWhitelisted && !hasOwnRule) {
         return err('此優惠碼不適用本次團購');
       }
     }
@@ -1158,8 +1196,9 @@ function validatePromoCodeMulti(code, campaignIds) {
     if (camp) {
       let allowedCodes = [];
       try { allowedCodes = JSON.parse(camp.allowedCodes || '[]'); } catch(e) {}
-      const isWhitelisted = allowedCodes.map(c=>c.toUpperCase()).includes(promo.code.toUpperCase());
-      if (!isWhitelisted) {
+      const isWhitelisted = allowedCodes.map(c=>String(c).toUpperCase()).includes(promo.code.toUpperCase());
+      const hasOwnRule = campaignRules.some(r => String(r.campaignId) === String(campaignId));
+      if (!isWhitelisted && !hasOwnRule) {
         results[campaignId] = { discountType: 'none', discountValue: '{}', label: '此團購不適用', error: true };
         return;
       }

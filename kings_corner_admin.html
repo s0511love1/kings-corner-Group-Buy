@@ -663,7 +663,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 </div>
 <!-- MODAL: CSV Import -->
 <div class="modal-bg" id="modal-import">
-  <div class="modal" style="max-width:560px"><div class="modal-hd"><h3>匯入商品 CSV</h3><button class="modal-close" onclick="closeModal('modal-import')">×</button></div>
+  <div class="modal" style="max-width:720px"><div class="modal-hd"><h3>匯入商品 CSV</h3><button class="modal-close" onclick="closeModal('modal-import')">×</button></div>
     <div class="modal-body">
       <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.8">格式：<code style="color:var(--gold)">廠商名稱, 分類, 商品名稱, 規格, 建議單價, 圖片網址</code></div>
       <div class="csv-drop" id="csv-drop-zone" onclick="document.getElementById('csv-file-input').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleCsvDrop(event)">
@@ -673,13 +673,15 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       </div>
       <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="handleCsvFile(this)">
       <div id="csv-preview" style="display:none;margin:14px 0">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">預覽（前5筆）</div>
-        <div class="table-wrap overflow-x" id="csv-preview-table"></div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;margin-bottom:8px">預覽（已依廠商 → 分類排序，匯入後也會照這個順序）</div>
+        <div id="csv-dup-alert" style="display:none;background:rgba(200,39,45,0.12);border:1px solid #c8272d;border-radius:8px;padding:10px 12px;font-size:12px;color:#ff8080;margin-bottom:10px;line-height:1.7"></div>
+        <div class="table-wrap overflow-x" id="csv-preview-table" style="max-height:320px;overflow-y:auto"></div>
         <div style="font-size:12px;color:var(--muted);margin-top:8px" id="csv-count-label"></div>
       </div>
       <div class="ff"><label>匯入模式</label>
-        <select id="import-mode" style="width:100%;background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none" onchange="updateImportModeDesc()">
-          <option value="upsert">① 新增 / 更新（不刪除其他商品）</option>
+        <select id="import-mode" style="width:100%;background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none" onchange="updateImportModeDesc();renderCsvPreview()">
+          <option value="upsert">① 新增 / 更新（已存在的更新資料，不會重複新增）</option>
+          <option value="add_only">①-2 只新增（已存在的跳過，不覆蓋）</option>
           <option value="replace_supplier">② 覆蓋整個廠商（未在CSV的停用）</option>
           <option value="rebuild">③ 全部重建</option>
         </select>
@@ -1118,6 +1120,13 @@ function populateAllowedCodes(selected=[]){
   const el=document.getElementById('c-allowed-codes');if(!el)return;
   if(!promoCodes.length){el.innerHTML='<span style="font-size:12px;color:var(--faint)">尚無優惠碼，請先在優惠碼管理頁新增</span>';return;}
   el.innerHTML=promoCodes.map(p=>{
+    let rules=[];try{rules=JSON.parse(p.campaignRules||'[]');}catch(e){}
+    const ownRule=editCampaignId&&rules.some(r=>String(r.campaignId)===String(editCampaignId));
+    if(ownRule)return`<label title="此優惠碼已為本團購設定專屬規則，自動開放" style="display:inline-flex;align-items:center;gap:6px;background:rgba(201,168,76,0.15);border:1px solid var(--gold);border-radius:6px;padding:6px 10px;font-size:12px;opacity:0.9">
+      <input type="checkbox" value="${p.code}" checked disabled>
+      <span style="font-weight:700;color:var(--gold)">${p.code}</span>
+      <span style="color:var(--muted)">${p.name}・已設專屬規則</span>
+    </label>`;
     const checked=selected.includes(p.code);
     return`<label style="display:inline-flex;align-items:center;gap:6px;background:${checked?'rgba(201,168,76,0.15)':'var(--dark)'};border:1px solid ${checked?'var(--gold)':'var(--border)'};border-radius:6px;padding:6px 10px;cursor:pointer;font-size:12px;transition:all 0.15s">
       <input type="checkbox" value="${p.code}" ${checked?'checked':''} style="cursor:pointer" onchange="onAllowedCodeChange(this)">
@@ -1171,7 +1180,7 @@ function editCampaign(id){
   document.getElementById('c-status').value=c.status;document.getElementById('c-note').value=c.note||'';
   populateCampaignSel('c-supplier-sel');document.getElementById('c-supplier-sel').value=String(c.supplierId||'');
   document.getElementById('prod-rows').innerHTML='';
-  (c.products||[]).forEach(p=>addProdRow(p.name,p.price,p.stock));
+  (c.products||[]).forEach(p=>addProdRow(p.name,p.price,p.stock,{id:p.id,cat:p.cat,spec:p.spec,img:p.img}));
   let allowedCodes=[];try{allowedCodes=JSON.parse(c.allowedCodes||'[]');}catch(e){}
   populateAllowedCodes(allowedCodes);
   setMenuImagesField(c.menuImages);
@@ -1263,10 +1272,21 @@ function selectAllVisible(){document.querySelectorAll('.prod-pick-row[data-uid]'
 function deselectAll(){pickerSelectedIds.clear();document.querySelectorAll('.prod-pick-row[data-uid]').forEach(r=>{r.classList.remove('selected');r.querySelector('.prod-pick-cb').textContent='';});document.getElementById('selected-count-label').textContent='已選 0 項';}
 function buildStep3FromPicker(){
   document.getElementById('prod-rows').innerHTML='';
-  pickerSelectedIds.forEach(uid=>{const pid=uid.replace('prod__','');const p=products.find(x=>String(x.id)===String(pid));if(p)addProdRow(p.name,p.price,999);});
+  const order=new Map(products.map((p,i)=>[String(p.id),i]));
+  const picked=[...pickerSelectedIds].map(uid=>products.find(x=>String(x.id)===uid.replace('prod__',''))).filter(Boolean);
+  // 依分類（商品庫中首次出現順序）→ 商品庫順序 排列
+  const catFirst={};products.forEach((p,i)=>{if(!(p.cat in catFirst))catFirst[p.cat]=i;});
+  picked.sort((a,b)=>(catFirst[a.cat]-catFirst[b.cat])||(order.get(String(a.id))-order.get(String(b.id))));
+  // 編輯既有團購時，同名商品沿用原本的品項 id（避免已售數量、庫存歸零）
+  const oldProds=editCampaignId?(campaigns.find(c=>String(c.id)===String(editCampaignId))?.products||[]):[];
+  picked.forEach(p=>{
+    const old=oldProds.find(o=>normName(o.name)===normName(p.name));
+    addProdRow(p.name,old?old.price:p.price,old?(old.stock||999):999,{id:old?old.id:'',cat:p.cat,spec:p.spec,img:p.img});
+  });
 }
-function addProdRow(name='',price='',stock=''){
+function addProdRow(name='',price='',stock='',meta={}){
   const div=document.createElement('div');div.className='prod-row';
+  div.dataset.id=meta.id||'';div.dataset.cat=meta.cat||'';div.dataset.spec=meta.spec||'';div.dataset.img=meta.img||'';
   div.innerHTML=`<input type="text" placeholder="品項名稱" value="${name}">
     <input type="number" placeholder="0" value="${price}" style="text-align:center">
     <input type="number" placeholder="999" value="${stock}" style="text-align:center">
@@ -1309,9 +1329,19 @@ async function saveCampaign(){
   const name=document.getElementById('c-name').value.trim();if(!name){showToast('請輸入團購名稱','error');return;}
   const deadline=document.getElementById('c-deadline').value;if(!deadline){showToast('請選擇截止日期','error');return;}
   const supplierId=document.getElementById('c-supplier-sel').value;
-  const prods=[...document.querySelectorAll('#prod-rows .prod-row')].map(r=>{
+  const oldProds=editCampaignId?(campaigns.find(c=>String(c.id)===String(editCampaignId))?.products||[]):[];
+  const usedIds=new Set();
+  const prods=[...document.querySelectorAll('#prod-rows .prod-row')].map((r,idx)=>{
     const inputs=r.querySelectorAll('input');
-    return{id:'p'+Date.now()+Math.random(),name:inputs[0].value.trim(),price:parseFloat(inputs[1].value)||0,stock:parseInt(inputs[2].value)||999};
+    const pname=inputs[0].value.trim();
+    // 商品庫補資料（分類／規格／圖片），以「廠商＋名稱」比對
+    const lib=products.find(p=>String(p.supplierId)===String(supplierId)&&normName(p.name)===normName(pname))||products.find(p=>normName(p.name)===normName(pname));
+    // 品項 id：優先沿用列上的 id → 同名舊品項 → 新產生
+    let id=r.dataset.id||(oldProds.find(o=>normName(o.name)===normName(pname))?.id)||'';
+    if(!id||usedIds.has(id))id='p'+Date.now()+'_'+idx+Math.random().toString(36).slice(2,5);
+    usedIds.add(id);
+    return{id,name:pname,price:parseFloat(inputs[1].value)||0,stock:parseInt(inputs[2].value)||999,
+      cat:r.dataset.cat||lib?.cat||'',spec:r.dataset.spec||lib?.spec||'',img:r.dataset.img||lib?.img||''};
   }).filter(p=>p.name);
   const allowedCodes=getSelectedAllowedCodes();
   const campId=editCampaignId||'';
@@ -1628,7 +1658,7 @@ function reopenCampaign(id){
   document.getElementById('c-note').value=c.note||'';
   // Pre-fill products
   document.getElementById('prod-rows').innerHTML='';
-  (c.products||[]).forEach(p=>addProdRow(p.name,p.price,p.stock||999));
+  (c.products||[]).forEach(p=>addProdRow(p.name,p.price,p.stock||999,{cat:p.cat,spec:p.spec,img:p.img}));
   // Pre-fill allowed codes
   let allowedCodes=[];
   try{allowedCodes=JSON.parse(c.allowedCodes||'[]');}catch(e){}
@@ -1689,6 +1719,9 @@ function renderProducts(){
     if(af==='active'&&p.active==='false')return false;
     if(af==='inactive'&&p.active!=='false')return false;return true;
   });
+  // 排序：廠商 → 分類 → 商品庫原始順序（= 匯入順序）
+  const order=new Map(products.map((p,i)=>[p,i]));
+  list=list.slice().sort((a,b)=>supName(a.supplierId).localeCompare(supName(b.supplierId),'zh-Hant')||String(a.cat||'').localeCompare(String(b.cat||''),'zh-Hant')||(order.get(a)-order.get(b)));
   document.getElementById('prod-totals').innerHTML=`<div class="tb-item"><div class="tb-label">符合商品</div><div class="tb-val">${list.length}</div></div><div class="tb-item"><div class="tb-label">啟用中</div><div class="tb-val" style="color:#5dca8a">${list.filter(p=>p.active!=='false').length}</div></div><div class="tb-item"><div class="tb-label">停用</div><div class="tb-val" style="color:var(--faint)">${list.filter(p=>p.active==='false').length}</div></div>`;
   if(!list.length){document.getElementById('products-table').innerHTML=`<div class="empty"><div class="empty-icon">📦</div><p>沒有符合商品</p></div>`;return;}
   document.getElementById('products-table').innerHTML=`<table><thead><tr>
@@ -1782,8 +1815,8 @@ async function toggleProductActive(id){const p=products.find(x=>String(x.id)===S
 async function deleteProduct(){if(!confirm('確定永久刪除？建議改用「停用」保留歷史資料。'))return;loading(true,'刪除中…');try{await apiPost({action:'deleteRecord',type:'product',id:editProductId});closeModal('modal-product');await loadData();showToast('商品已刪除');}catch(e){showToast('刪除失敗','error');}finally{loading(false);}
 }
 
-function openImportCSV(){csvParsedRows=[];document.getElementById('csv-file-name').textContent='尚未選擇';document.getElementById('csv-file-input').value='';document.getElementById('csv-preview').style.display='none';document.getElementById('import-confirm-btn').disabled=true;document.getElementById('import-mode').value='upsert';updateImportModeDesc();document.getElementById('modal-import').classList.add('show');}
-function updateImportModeDesc(){const mode=document.getElementById('import-mode')?.value;const desc={upsert:'新增不存在的，更新已存在的，其他不動。',replace_supplier:'CSV廠商的商品，不在CSV裡的自動停用。其他廠商不受影響。',rebuild:'⚠️ 清空全部後重新匯入。'};const el=document.getElementById('import-mode-desc');if(el)el.textContent=desc[mode]||'';}
+function openImportCSV(){csvParsedRows=[];document.getElementById('csv-file-name').textContent='尚未選擇';document.getElementById('csv-file-input').value='';document.getElementById('csv-preview').style.display='none';document.getElementById('import-confirm-btn').disabled=true;document.getElementById('import-mode').value='upsert';updateImportModeDesc();document.getElementById('csv-dup-alert').style.display='none';document.getElementById('modal-import').classList.add('show');}
+function updateImportModeDesc(){const mode=document.getElementById('import-mode')?.value;const desc={upsert:'新增不存在的，更新已存在的（同廠商＋同商品名稱視為同一商品），其他不動。',add_only:'只新增商品庫沒有的商品；已存在的「廠商＋商品」直接跳過，不會改動。',replace_supplier:'CSV廠商的商品，不在CSV裡的自動停用。其他廠商不受影響。',rebuild:'⚠️ 清空全部後重新匯入。'};const el=document.getElementById('import-mode-desc');if(el)el.textContent=desc[mode]||'';}
 function handleCsvDrop(e){e.preventDefault();document.getElementById('csv-drop-zone').classList.remove('drag');const file=e.dataTransfer.files[0];if(file)parseCsvFile(file);}
 function handleCsvFile(input){const file=input.files[0];if(file)parseCsvFile(file);}
 function parseCSVRow(row){
@@ -1802,38 +1835,99 @@ function parseCSVRow(row){
   return cols;
 }
 
+// 名稱正規化：全形轉半形、去空白、英文小寫（用於「廠商＋商品」重複比對）
+function normName(v){return String(v||'').normalize('NFKC').replace(/\s+/g,'').toLowerCase();}
+// 自動判斷編碼：先試 UTF-8，失敗改用 Big5（Excel 在 Windows 存的 CSV 常是 Big5）
+function decodeCsvBuffer(buf){
+  const bytes=new Uint8Array(buf);
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(bytes).replace(/^﻿/,'');}
+  catch(e){
+    try{return new TextDecoder('big5').decode(bytes);}catch(e2){return new TextDecoder('utf-8').decode(bytes).replace(/^﻿/,'');}
+  }
+}
+let csvDupKeys=new Set();
 function parseCsvFile(file){
   document.getElementById('csv-file-name').textContent=file.name;
   const reader=new FileReader();
   reader.onload=e=>{
-    const rows=e.target.result.split(/[\r\n]+/).filter(r=>r.trim());
-    const dataRows=rows.slice(1).map(row=>{
+    const text=decodeCsvBuffer(e.target.result);
+    const rows=text.split(/\r\n|\n|\r/).filter(r=>r.trim());
+    let dataRows=rows.slice(1).map((row,idx)=>{
       const cols=parseCSVRow(row);
       return{
         supplierName:(cols[0]||'').trim(),
-        cat:(cols[1]||'').trim(),
+        cat:(cols[1]||'').trim()||'未分類',
         name:(cols[2]||'').trim(),
         spec:(cols[3]||'').trim(),
-        price:parseFloat(cols[4])||0,
-        img:(cols[5]||'').trim()
+        price:parseFloat(String(cols[4]||'').replace(/[$,，\s]/g,''))||0,
+        img:(cols[5]||'').trim(),
+        _line:idx+2
       };
     }).filter(r=>r.name&&r.supplierName);
+    // 排序：廠商（依 CSV 首次出現順序）→ 分類（依 CSV 首次出現順序）→ 原始順序
+    const supOrder={},catOrder={};
+    dataRows.forEach(r=>{
+      if(!(r.supplierName in supOrder))supOrder[r.supplierName]=Object.keys(supOrder).length;
+      const ck=r.supplierName+'::'+r.cat;if(!(ck in catOrder))catOrder[ck]=Object.keys(catOrder).length;
+    });
+    dataRows.sort((a,b)=>(supOrder[a.supplierName]-supOrder[b.supplierName])||(catOrder[a.supplierName+'::'+a.cat]-catOrder[b.supplierName+'::'+b.cat])||(a._line-b._line));
+    // 標記：CSV 內重複 / 商品庫已存在
+    const cnt={};
+    dataRows.forEach(r=>{r._key=normName(r.supplierName)+'::'+normName(r.name);cnt[r._key]=(cnt[r._key]||0)+1;});
+    csvDupKeys=new Set(Object.keys(cnt).filter(k=>cnt[k]>1));
+    dataRows.forEach(r=>{
+      r._dup=csvDupKeys.has(r._key);
+      const sup=suppliers.find(s=>normName(s.name)===normName(r.supplierName));
+      r._exists=!!(sup&&products.some(p=>String(p.supplierId)===String(sup.id)&&normName(p.name)===normName(r.name)));
+    });
     csvParsedRows=dataRows;
-    document.getElementById('csv-preview').style.display='block';
-    document.getElementById('csv-count-label').textContent=`共解析 ${dataRows.length} 筆`;
-    document.getElementById('csv-preview-table').innerHTML=`<table><thead><tr><th>廠商</th><th>分類</th><th>商品名稱</th><th>單價</th></tr></thead><tbody>`+dataRows.slice(0,5).map(r=>`<tr><td>${r.supplierName}</td><td><span class="badge badge-cat">${r.cat}</span></td><td style="font-weight:700">${r.name}</td><td style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--gold)">$${r.price}</td></tr>`).join('')+'</tbody></table>';
-    document.getElementById('import-confirm-btn').disabled=dataRows.length===0;
-  };reader.readAsText(file,'UTF-8');
+    renderCsvPreview();
+  };reader.readAsArrayBuffer(file);
+}
+function renderCsvPreview(){
+  const box=document.getElementById('csv-preview');if(!box)return;
+  const rows=csvParsedRows||[];
+  if(!rows.length&&!document.getElementById('csv-file-input').files.length){box.style.display='none';return;}
+  box.style.display='block';
+  const mode=document.getElementById('import-mode')?.value||'upsert';
+  const dups=rows.filter(r=>r._dup);
+  const exists=rows.filter(r=>r._exists&&!r._dup).length;
+  const fresh=rows.filter(r=>!r._exists&&!r._dup).length;
+  const alertEl=document.getElementById('csv-dup-alert');
+  if(dups.length){
+    const names=[...csvDupKeys].map(k=>{const g=dups.filter(x=>x._key===k);return `${g[0].supplierName}／${g.map(x=>x.name).filter((v,i,a)=>a.indexOf(v)===i).join(' ＝ ')}（第 ${g.map(x=>x._line).join('、')} 行）`;});
+    alertEl.innerHTML=`⛔ CSV 內有 ${csvDupKeys.size} 組重複的「廠商＋商品」，請修正後重新選擇檔案：<br>`+names.map(n=>'・'+n).join('<br>');
+    alertEl.style.display='block';
+  }else alertEl.style.display='none';
+  const statusOf=r=>r._dup?'<span style="color:#ff8080;font-weight:700">⛔ 重複</span>'
+    :r._exists?(mode==='add_only'?'<span style="color:var(--faint)">已存在・跳過</span>':mode==='rebuild'?'<span style="color:#5dca8a">新增</span>':'<span style="color:var(--gold)">已存在・更新</span>')
+    :'<span style="color:#5dca8a">新增</span>';
+  let lastCat='';
+  document.getElementById('csv-preview-table').innerHTML=`<table><thead><tr><th>狀態</th><th>廠商</th><th>分類</th><th>商品名稱</th><th>規格</th><th>單價</th></tr></thead><tbody>`+rows.map(r=>{
+    const ck=r.supplierName+'::'+r.cat;const sep=ck!==lastCat&&lastCat?'border-top:2px solid var(--border);':'';lastCat=ck;
+    return`<tr style="${sep}${r._dup?'background:rgba(200,39,45,0.12)':''}"><td style="font-size:11px;white-space:nowrap">${statusOf(r)}</td><td>${r.supplierName}</td><td><span class="badge badge-cat">${r.cat}</span></td><td style="font-weight:700">${r.name}</td><td style="font-size:11px;color:var(--muted)">${r.spec}</td><td style="font-family:'Bebas Neue',sans-serif;font-size:16px;color:var(--gold)">$${r.price}</td></tr>`;
+  }).join('')+'</tbody></table>';
+  const skipTxt=mode==='add_only'?`跳過 ${exists}`:mode==='rebuild'?`（全部重建）`:`更新 ${exists}`;
+  document.getElementById('csv-count-label').textContent=`共 ${rows.length} 筆：新增 ${mode==='rebuild'?rows.length-dups.length:fresh}、${skipTxt}${dups.length?`、重複 ${dups.length}（需修正）`:''}`;
+  document.getElementById('import-confirm-btn').disabled=rows.length===0||dups.length>0;
 }
 async function confirmImport(){
   if(!csvParsedRows.length){showToast('沒有可匯入的資料','error');return;}
-  const mode=document.getElementById('import-mode').value;
+  if(csvParsedRows.some(r=>r._dup)){showToast('CSV 內有重複的「廠商＋商品」，請先修正','error');return;}
+  let mode=document.getElementById('import-mode').value;
+  let sourceRows=csvParsedRows;
+  if(mode==='add_only'){
+    sourceRows=csvParsedRows.filter(r=>!r._exists);
+    if(!sourceRows.length){showToast('沒有需要新增的商品（全部已存在）','error');return;}
+    mode='upsert';
+  }
   // Map supplier names to IDs, warn if not found
   const missingSuppliers=new Set();
-  const prods=csvParsedRows.map(r=>{
-    const sup=suppliers.find(s=>s.name===r.supplierName);
+  const prods=sourceRows.map(r=>{
+    const sup=suppliers.find(s=>normName(s.name)===normName(r.supplierName));
     if(!sup)missingSuppliers.add(r.supplierName);
-    return{supplierId:sup?String(sup.id):'__new__'+r.supplierName,supplierName:r.supplierName,...r};
+    return{supplierId:sup?String(sup.id):'__new__'+r.supplierName,supplierName:sup?sup.name:r.supplierName,
+      cat:r.cat,name:r.name,spec:r.spec,price:r.price,img:r.img};
   });
 
   // Warn about missing suppliers - show toast and proceed
@@ -1879,7 +1973,8 @@ async function confirmImport(){
     }
     closeModal('modal-import');
     await loadData();
-    showToast(`匯入完成：新增 ${totalAdded}，更新 ${totalUpdated}${totalDeactivated?`，停用 ${totalDeactivated}`:''}  ✓`);
+    const skipped=csvParsedRows.length-sourceRows.length;
+    showToast(`匯入完成：新增 ${totalAdded}，更新 ${totalUpdated}${skipped?`，跳過 ${skipped}`:''}${totalDeactivated?`，停用 ${totalDeactivated}`:''}  ✓`);
   }catch(e){
     console.error('Import error:',e);
     showToast('匯入失敗：'+e.message,'error');

@@ -121,6 +121,12 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 .cat-tab.active{background:var(--dark);border-color:var(--dark);color:var(--gold)}
 .cat-panel{display:none}
 .cat-panel.active{display:block}
+.cat-tabs{position:sticky;top:var(--hdr-h,56px);z-index:5;background:white;scroll-margin-top:var(--hdr-h,56px)}
+@supports (overflow:clip){.form-card{overflow:clip}}
+.cat-tab .cat-n{font-weight:400;opacity:0.7;margin-left:3px}
+.cat-hd{display:none;padding:10px 16px 6px;font-size:12px;font-weight:700;color:var(--gold-dark);background:#faf7f2;border-bottom:1px solid #f0ece8;letter-spacing:1px}
+#cat-panels.show-all .cat-panel{display:block}
+#cat-panels.show-all .cat-hd{display:block}
 
 /* ── PRODUCT ROW (with image) ── */
 .prod-item{display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #f0ece8;gap:10px}
@@ -234,7 +240,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--page-bg);background-
 @media(min-width:1240px){
   .order-wrap.has-menu{max-width:1300px;display:flex;gap:20px;padding:0 16px;align-items:flex-start}
   .order-wrap.has-menu .order-main{flex:1;min-width:0;max-width:960px;padding-left:0;padding-right:0}
-  .order-wrap.has-menu .menu-aside{display:block;width:300px;flex-shrink:0;position:sticky;top:16px;margin-top:18px;max-height:calc(100vh - 120px);overflow-y:auto}
+  .order-wrap.has-menu .menu-aside{display:block;width:300px;flex-shrink:0;position:sticky;top:calc(var(--hdr-h,56px) + 12px);margin-top:18px;max-height:calc(100vh - var(--hdr-h,56px) - 110px);overflow-y:auto}
   .order-wrap.has-menu #menu-inline{display:none!important}
 }
 /* Lightbox */
@@ -1421,7 +1427,12 @@ function cartItemSetQty(campaignId, itemId, val){
   renderCartPage();
 }
 
+// 量測 sticky header 高度，讓分類列／菜單欄貼齊在 header 下方
+function syncHeaderHeight(){const h=document.querySelector('.header');if(h)document.documentElement.style.setProperty('--hdr-h',h.offsetHeight+'px');}
+window.addEventListener('resize',syncHeaderHeight);window.addEventListener('load',syncHeaderHeight);
+let lastPromoMulti={};
 async function applyGlobalPromo(){
+  lastPromoMulti={};
   const inputEl=document.getElementById('cart-global-promo');
   const resultEl=document.getElementById('global-promo-result');
   const clearBtn=document.getElementById('global-promo-clear');
@@ -1451,6 +1462,7 @@ async function applyGlobalPromo(){
     if(data.status!=='ok'){
       globalError=data.message||'無效優惠碼';
     } else {
+      lastPromoMulti=data.results||{};
       // Apply per-campaign results
       campaignIds.forEach(cid=>{
         const r=data.results?.[cid];
@@ -1479,9 +1491,12 @@ async function applyGlobalPromo(){
     Object.values(cart).forEach(e=>{e.promoCode='';e.promoResult=null;});
   } else {
     const applyCount=Object.values(cart).filter(e=>e.promoResult&&!e.promoResult.error).length;
-    const msg=applyCount>0
+    const notApplicable=Object.keys(cart).filter(cid=>lastPromoMulti[cid]&&lastPromoMulti[cid].error)
+      .map(cid=>CAMPAIGNS.find(x=>String(x.id)===String(cid))?.name||cid);
+    const msg=(applyCount>0
       ?`✅ 已套用 ${applyCount} 個團購的折扣`
-      :`ℹ️ 優惠碼有效，此批商品無對應折扣（純追蹤）`;
+      :(notApplicable.length?`⚠️ 此優惠碼不適用購物車中的團購`:`ℹ️ 優惠碼有效，此批商品無對應折扣（純追蹤）`))
+      +(applyCount>0&&notApplicable.length?`（不適用：${notApplicable.join('、')}）`:'');
     if(resultEl){resultEl.textContent=msg;resultEl.style.color=applyCount>0?'#2e7d32':'#888';resultEl.style.display='block';}
     if(clearBtn)clearBtn.style.display='block';
   }
@@ -2155,17 +2170,25 @@ function buildOrderPage(){
      </div>`;
   document.getElementById('pay-box-area').innerHTML = `<strong>💳 付款方式</strong>${c.note||'請向管理員確認付款方式'}`;
   try{ renderMenuImages(c); }catch(e){ console.error('menu images error', e); }
+  syncHeaderHeight();
 
   // Normalize product cat - replace undefined/empty with '未分類'
   c.products.forEach(p=>{ if(!p.cat||p.cat==='undefined'||p.cat.trim()==='') p.cat='未分類'; });
   const cats = [...new Set(c.products.map(p=>p.cat))];
-  const validCats = cats.filter(c=>c&&c!=='undefined'&&c!=='null'&&c.trim()!=='');
-  document.getElementById('cat-tabs').innerHTML = validCats.map((cat,i)=>
-    `<button class="cat-tab ${i===0?'active':''}" onclick="switchCat('${CSS.escape(cat)}',this)">${cat}</button>`
-  ).join('');
+  // 「未分類」排最後，其他維持開團時的順序
+  const validCats = cats.filter(c=>c&&c!=='undefined'&&c!=='null'&&c.trim()!=='')
+    .sort((a,b)=>(a==='未分類')-(b==='未分類'));
+  const multiCat = validCats.length > 1;
+  const tabsEl = document.getElementById('cat-tabs');
+  tabsEl.style.display = multiCat ? 'flex' : 'none';
+  tabsEl.innerHTML = multiCat
+    ? `<button class="cat-tab active" data-cat="__all__" onclick="switchCat('__all__',this)">全部<span class="cat-n">${c.products.length}</span></button>` +
+      validCats.map((cat,i)=>`<button class="cat-tab" data-cat="${i}" onclick="switchCat('${i}',this)">${cat}<span class="cat-n">${c.products.filter(p=>p.cat===cat).length}</span></button>`).join('')
+    : '';
+  document.getElementById('cat-panels').className = 'show-all';
 
   document.getElementById('cat-panels').innerHTML = validCats.map((cat,i)=>
-    `<div class="cat-panel ${i===0?'active':''}" id="cp-${CSS.escape(cat)}">` +
+    `<div class="cat-panel" data-cat="${i}">` + (multiCat?`<div class="cat-hd">${cat}</div>`:'') +
     c.products.filter(p=>p.cat===cat).map(p=>{
       if(qty[p.id]===undefined)qty[p.id]=0; // keep pre-filled qty from existing cart
       const isSoldOut=p.remaining===0;
@@ -2202,7 +2225,12 @@ function switchCat(cat,el){
   document.querySelectorAll('.cat-tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.cat-panel').forEach(p=>p.classList.remove('active'));
   el.classList.add('active');
-  document.getElementById('cp-'+cat).classList.add('active');
+  const panels=document.getElementById('cat-panels');
+  if(cat==='__all__'){ panels.className='show-all'; }
+  else { panels.className=''; panels.querySelector(`.cat-panel[data-cat="${cat}"]`)?.classList.add('active'); }
+  // 切換後讓分類列保持在可視範圍
+  const tabs=document.getElementById('cat-tabs');
+  if(tabs.getBoundingClientRect().top<0) tabs.scrollIntoView({block:'start'});
 }
 function chg(id,d){
   const p=currentCampaign.products.find(x=>String(x.id)===String(id));
