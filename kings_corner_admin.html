@@ -448,6 +448,14 @@ tr:hover td{background:rgba(255,255,255,0.02)}
             <option value="done">已結束（移至歷史）</option>
           </select>
         </div>
+        <div class="ff" id="c-closed-status-row" style="display:none;margin-bottom:0">
+        <label>結單進度</label>
+        <select id="c-closed-status" style="background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none;width:100%">
+          <option value="pending">🕐 結單中（處理訂單）</option>
+          <option value="shipping">🚚 出貨中</option>
+          <option value="arrived">📦 已到貨，可取貨</option>
+        </select>
+      </div>
         <div class="ff" style="margin-bottom:0" id="c-pickup-date-row">
           <label>預計取貨日</label>
           <input type="text" id="c-pickup-date" placeholder="例：06/28" style="background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none;width:100%">
@@ -473,7 +481,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       </div>
       <div class="ff">
         <label>開放優惠碼（白名單）</label>
-        <div style="font-size:11px;color:var(--faint);margin-bottom:8px">勾選哪些優惠碼可在此團購使用，不勾選則全部不可用</div>
+        <div style="font-size:11px;color:var(--faint);margin-bottom:8px">已在優惠碼裡設定本團購專屬規則的碼會自動開放；只勾選、沒有規則的碼＝可使用但不折扣（純追蹤）</div>
         <div id="c-allowed-codes" style="display:flex;flex-wrap:wrap;gap:8px;background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:44px"></div>
       </div>
     </div>
@@ -595,16 +603,8 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           <label style="margin-bottom:0">各團購折扣規則</label>
           <button class="btn btn-outline btn-sm" onclick="addCampaignRule()">＋ 新增規則</button>
         </div>
-        <div style="font-size:11px;color:var(--faint);margin-bottom:10px">未設定規則的團購預設為「不允許使用」。</div>
+        <div style="font-size:11px;color:var(--faint);margin-bottom:10px">有設定規則的團購會自動開放此碼；沒設定規則的團購，除非在團購白名單勾選（僅追蹤、不折扣），否則不可使用。</div>
         <div id="pc-rules-list" style="display:flex;flex-direction:column;gap:8px"></div>
-      </div>
-      <div class="ff" id="c-closed-status-row" style="display:none">
-        <label>結單進度</label>
-        <select id="c-closed-status" style="background:var(--dark3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none;width:100%">
-          <option value="pending">🕐 結單中（處理訂單）</option>
-          <option value="shipping">🚚 出貨中</option>
-          <option value="arrived">📦 已到貨，可取貨</option>
-        </select>
       </div>
       <div class="ff"><label>備註</label><input type="text" id="pc-note" placeholder="獎金規則、備註說明…"></div>
     </div>
@@ -884,13 +884,22 @@ function renderAll(){
 
 function renderDashboard(){
   const active=campaigns.filter(c=>c.status==='active');
-  const tot=orders.reduce((s,o)=>s+(parseFloat(o.discounted)||0),0);
-  const unpaid=orders.filter(o=>!o.paid).length;
+  const closed=campaigns.filter(c=>c.status==='closed');
+  const ids=list=>new Set(list.map(c=>String(c.id)));
+  const activeIds=ids(active), openIds=ids([...active,...closed]);
+  const amt=o=>parseFloat(o.discounted)||0;
+  const money=n=>'$'+Math.round(n).toLocaleString();
+  const activeOrders=orders.filter(o=>activeIds.has(String(o.campaignId)));
+  const activeAmt=activeOrders.reduce((s,o)=>s+amt(o),0);
+  const allAmt=orders.reduce((s,o)=>s+amt(o),0);
+  // 待收款：進行中＋已結單（未結束）的團購中，尚未付款的訂單；金額含運費
+  const unpaidOrders=orders.filter(o=>!o.paid&&openIds.has(String(o.campaignId)));
+  const unpaidAmt=unpaidOrders.reduce((s,o)=>s+amt(o)+(parseFloat(o.shippingFee)||0),0);
   document.getElementById('stats-grid').innerHTML=`
-    <div class="stat-card"><div class="stat-label">進行中團購</div><div class="stat-val">${active.length}</div><div class="stat-sub">共 ${campaigns.length} 次</div></div>
-    <div class="stat-card"><div class="stat-label">總訂單</div><div class="stat-val">${orders.length}</div><div class="stat-sub">筆</div></div>
-    <div class="stat-card"><div class="stat-label">總金額</div><div class="stat-val">$${Math.round(tot/1000)}K</div><div class="stat-sub">優惠後</div></div>
-    <div class="stat-card"><div class="stat-label">待付款</div><div class="stat-val" style="color:#ff8080">${unpaid}</div><div class="stat-sub">筆</div></div>
+    <div class="stat-card"><div class="stat-label">進行中團購</div><div class="stat-val">${active.length}</div><div class="stat-sub">已結單 ${closed.length}・累計 ${campaigns.length} 次</div></div>
+    <div class="stat-card"><div class="stat-label">進行中訂單</div><div class="stat-val">${activeOrders.length}</div><div class="stat-sub">累計 ${orders.length} 筆</div></div>
+    <div class="stat-card"><div class="stat-label">進行中金額</div><div class="stat-val" style="font-size:${activeAmt>=100000?'30px':''}">${money(activeAmt)}</div><div class="stat-sub">商品優惠後・累計 ${money(allAmt)}</div></div>
+    <div class="stat-card"><div class="stat-label">待收款</div><div class="stat-val" style="color:#ff8080">${unpaidOrders.length}</div><div class="stat-sub">筆・${money(unpaidAmt)}（含運，不含已結束團購）</div></div>
     <div class="stat-card"><div class="stat-label">廠商數</div><div class="stat-val">${suppliers.length}</div><div class="stat-sub">合作中</div></div>`;
   document.getElementById('dash-active-table').innerHTML=active.length?campsTableHtml(active):`<div class="empty"><div class="empty-icon">🛒</div><p>目前沒有進行中的團購</p></div>`;
   const recent=[...orders].sort((a,b)=>String(b.id).localeCompare(String(a.id))).slice(0,5);
@@ -1100,6 +1109,7 @@ function onDiscountTypeChange(prefill){
     wrap.innerHTML=inp('c-dr-threshold','滿額門檻','1000',prefill?.threshold||'')+inp('c-dr-off','折扣金額','100',prefill?.off||'');
   }
 }
+function parseDR(v){if(!v)return null;if(typeof v==='object')return v.type?v:null;try{const o=JSON.parse(v);return o&&o.type?o:null;}catch(e){return null;}}
 function getCampDiscountRule(){
   const type=document.getElementById('c-discount-type')?.value||'none';
   if(type==='none')return null;
@@ -1121,7 +1131,8 @@ function populateAllowedCodes(selected=[]){
   if(!promoCodes.length){el.innerHTML='<span style="font-size:12px;color:var(--faint)">尚無優惠碼，請先在優惠碼管理頁新增</span>';return;}
   el.innerHTML=promoCodes.map(p=>{
     let rules=[];try{rules=JSON.parse(p.campaignRules||'[]');}catch(e){}
-    const ownRule=editCampaignId&&rules.some(r=>String(r.campaignId)===String(editCampaignId));
+    const refId=editCampaignId||reopenSourceId;
+    const ownRule=refId&&rules.some(r=>String(r.campaignId)===String(refId));
     if(ownRule)return`<label title="此優惠碼已為本團購設定專屬規則，自動開放" style="display:inline-flex;align-items:center;gap:6px;background:rgba(201,168,76,0.15);border:1px solid var(--gold);border-radius:6px;padding:6px 10px;font-size:12px;opacity:0.9">
       <input type="checkbox" value="${p.code}" checked disabled>
       <span style="font-weight:700;color:var(--gold)">${p.code}</span>
@@ -1149,7 +1160,10 @@ function onSupplierChange(){
   const nameEl=document.getElementById('c-name');
   if(sup&&!nameEl.value){const ym=new Date().toISOString().slice(0,7).replace('-','');nameEl.value=`${sup.name} ${ym} 團購`;}
 }
+let reopenSourceId=null;
 function openNewCampaign(){
+  clearTimeout(window._campAutoClose);
+  reopenSourceId=null;
   editCampaignId=null;
   document.getElementById('mc-title').textContent='新增團購';
   ['c-name','c-note'].forEach(id=>document.getElementById(id).value='');
@@ -1165,12 +1179,14 @@ function openNewCampaign(){
   document.getElementById('modal-campaign').classList.add('show');
 }
 function editCampaign(id){
+  clearTimeout(window._campAutoClose);
+  reopenSourceId=null;
   const c=campaigns.find(x=>String(x.id)===String(id));if(!c)return;
   editCampaignId=String(id);document.getElementById('mc-title').textContent='編輯團購';
   document.getElementById('c-name').value=c.name;document.getElementById('c-deadline').value=c.deadline;
   document.getElementById('c-min').value=c.minPeople||'';
   // 載入 discountRule
-  const dr=c.discountRule||(c.discount?{type:'percent',value:String(c.discount)}:null);
+  const dr=parseDR(c.discountRule)||(c.discount?{type:'percent',value:String(c.discount)}:null);
   if(dr&&dr.type&&dr.type!=='none'){
     document.getElementById('c-discount-type').value=dr.type;
     onDiscountTypeChange(dr);
@@ -1220,6 +1236,7 @@ function wizardNext(){
   if(wizardStep===1){
     if(!document.getElementById('c-name').value.trim()){showToast('請輸入團購名稱','error');return;}
     if(!document.getElementById('c-deadline').value){showToast('請選擇截止日期','error');return;}
+    if(!pickerSelectedIds.size)preselectPickerFromRows();
     buildProductPicker();showWizardStep(2);
   }else if(wizardStep===2){buildStep3FromPicker();showWizardStep(3);}
 }
@@ -1271,6 +1288,8 @@ function togglePickerProd(uid){
 function selectAllVisible(){document.querySelectorAll('.prod-pick-row[data-uid]').forEach(r=>{pickerSelectedIds.add(r.dataset.uid);r.classList.add('selected');r.querySelector('.prod-pick-cb').textContent='✓';});document.getElementById('selected-count-label').textContent=`已選 ${pickerSelectedIds.size} 項`;}
 function deselectAll(){pickerSelectedIds.clear();document.querySelectorAll('.prod-pick-row[data-uid]').forEach(r=>{r.classList.remove('selected');r.querySelector('.prod-pick-cb').textContent='';});document.getElementById('selected-count-label').textContent='已選 0 項';}
 function buildStep3FromPicker(){
+  // 保留目前步驟 3 已有的列（價格、庫存、品項 id 等），避免來回切換步驟時被清空
+  const existingRows=[...document.querySelectorAll('#prod-rows .prod-row')].map(r=>{const ins=r.querySelectorAll('input');return{name:ins[0].value.trim(),price:ins[1].value,stock:ins[2].value,id:r.dataset.id,cat:r.dataset.cat,spec:r.dataset.spec,img:r.dataset.img};}).filter(x=>x.name);
   document.getElementById('prod-rows').innerHTML='';
   const order=new Map(products.map((p,i)=>[String(p.id),i]));
   const picked=[...pickerSelectedIds].map(uid=>products.find(x=>String(x.id)===uid.replace('prod__',''))).filter(Boolean);
@@ -1280,9 +1299,21 @@ function buildStep3FromPicker(){
   // 編輯既有團購時，同名商品沿用原本的品項 id（避免已售數量、庫存歸零）
   const oldProds=editCampaignId?(campaigns.find(c=>String(c.id)===String(editCampaignId))?.products||[]):[];
   picked.forEach(p=>{
+    const cur=existingRows.find(o=>normName(o.name)===normName(p.name));
     const old=oldProds.find(o=>normName(o.name)===normName(p.name));
-    addProdRow(p.name,old?old.price:p.price,old?(old.stock||999):999,{id:old?old.id:'',cat:p.cat,spec:p.spec,img:p.img});
+    addProdRow(p.name,cur?cur.price:(old?old.price:p.price),cur?cur.stock:(old?(old.stock||999):999),{id:cur?.id||old?.id||'',cat:p.cat,spec:p.spec,img:p.img});
   });
+  // 商品庫找不到的手動品項，原樣保留在最後
+  const sid=document.getElementById('c-supplier-sel').value;
+  existingRows.filter(r=>!products.some(p=>String(p.supplierId)===String(sid)&&normName(p.name)===normName(r.name)))
+    .forEach(r=>addProdRow(r.name,r.price,r.stock,{id:r.id,cat:r.cat,spec:r.spec,img:r.img}));
+}
+// 進入選品步驟時，依目前已有品項預先勾選
+function preselectPickerFromRows(){
+  const sid=document.getElementById('c-supplier-sel').value;
+  const names=[...document.querySelectorAll('#prod-rows .prod-row')].map(r=>normName(r.querySelector('input').value)).filter(Boolean);
+  if(!names.length)return;
+  products.filter(p=>String(p.supplierId)===String(sid)&&names.includes(normName(p.name))).forEach(p=>pickerSelectedIds.add('prod__'+p.id));
 }
 function addProdRow(name='',price='',stock='',meta={}){
   const div=document.createElement('div');div.className='prod-row';
@@ -1295,12 +1326,38 @@ function addProdRow(name='',price='',stock='',meta={}){
 }
 
 // ── 菜單圖片 ──
-function menuImgUrl(u, w){
-  u = String(u||'').trim(); if(!u) return '';
-  const m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=|thumbnail\?id=)([\w-]{20,})/);
-  if(m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w' + (w||1600);
-  if(/^https?:\/\/imgur\.com\/\w+$/.test(u)) return u.replace('://imgur.com','://i.imgur.com') + '.jpg';
-  return u;
+// 圖片網址解析：回傳可嘗試的網址清單（第一個失敗會自動換下一個）
+function menuImgInfo(u, w){
+  u = String(u||'').trim(); w = w||1600;
+  if(!u) return { urls:[], warn:'' };
+  if(/drive\.google\.com\/drive\/(u\/\d+\/)?folders\//.test(u)) return { urls:[], warn:'這是 Google Drive「資料夾」連結，請改貼單一圖片檔的分享連結' };
+  if(/photos\.app\.goo\.gl|photos\.google\.com/.test(u)) return { urls:[], warn:'Google 相簿的分享連結無法直接顯示，請改用 Google Drive 或 Imgur' };
+  const m = u.match(/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^#]*&)?id=|thumbnail\?(?:[^#]*&)?id=)([\w-]{20,})/)
+         || u.match(/drive\.usercontent\.google\.com\/(?:download|uc)\?(?:[^#]*&)?id=([\w-]{20,})/)
+         || u.match(/lh3\.googleusercontent\.com\/d\/([\w-]{20,})/);
+  if(m) return { urls:[
+      'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w' + w,
+      'https://lh3.googleusercontent.com/d/' + m[1] + '=w' + w
+    ], warn:'', drive:true };
+  if(/^https?:\/\/(www\.)?imgur\.com\/(a|gallery)\//.test(u)) return { urls:[], warn:'這是 Imgur「相簿」連結，請在圖片上按右鍵「複製圖片網址」（i.imgur.com 開頭）' };
+  if(/^https?:\/\/(www\.)?imgur\.com\/\w+$/.test(u)) return { urls:[u.replace(/:\/\/(www\.)?imgur\.com/,'://i.imgur.com') + '.jpg'], warn:'' };
+  if(/dropbox\.com\//.test(u)){ const base=u.replace(/([?&])dl=[01]&?/,'$1').replace(/[?&]$/,''); return { urls:[base + (base.includes('?')?'&':'?') + 'raw=1'], warn:'' }; }
+  if(!/^https?:\/\//.test(u)) return { urls:[], warn:'不是有效的網址（需以 http:// 或 https:// 開頭）' };
+  return { urls:[u], warn:'' };
+}
+function menuImgUrl(u, w){ return menuImgInfo(u, w).urls[0] || ''; }
+// <img> 載入失敗時換下一個候選網址；全部失敗才觸發 data-fail 處理
+function kcImgNext(img){
+  let list=[]; try{ list=JSON.parse(img.dataset.alt||'[]'); }catch(e){}
+  if(list.length){ img.dataset.alt=JSON.stringify(list.slice(1)); img.src=list[0]; return; }
+  img.onerror=null;
+  if(img.dataset.fail==='hide'){ const b=img.closest('.menu-thumb'); if(b) b.style.display='none'; }
+  else if(img.dataset.fail==='mark'){ img.style.display='none'; const n=img.parentElement.querySelector('.img-fail'); if(n) n.style.display='flex'; }
+}
+function kcImgTag(u, w, attrs, fail){
+  const info=menuImgInfo(u,w);
+  if(!info.urls.length) return '';
+  return `<img src="${info.urls[0]}" data-alt='${JSON.stringify(info.urls.slice(1))}' data-fail="${fail||''}" onerror="kcImgNext(this)" ${attrs||''}>`;
 }
 function parseMenuImages(v){
   let arr = v;
@@ -1316,14 +1373,27 @@ function setMenuImagesField(v){
 }
 function getMenuImagesField(){
   const el=document.getElementById('c-menu-images'); if(!el) return [];
-  return el.value.split('\n').map(x=>x.trim()).filter(x=>/^https?:\/\//.test(x));
+  return el.value.split('\n').map(x=>x.trim()).filter(x=>menuImgInfo(x).urls.length>0);
 }
 function previewMenuImages(){
   const box=document.getElementById('c-menu-preview'); if(!box) return;
-  const list=getMenuImagesField();
-  box.innerHTML = list.slice(0,6).map((u,i)=>`<a href="${menuImgUrl(u,2000)}" target="_blank" rel="noopener" title="第 ${i+1} 張" style="display:block;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--border);background:var(--dark3)">
-      <img src="${menuImgUrl(u,200)}" style="width:100%;height:100%;object-fit:cover" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:'⚠ 無法載入',style:'font-size:10px;color:#ff8080;padding:20px 4px;text-align:center'}))">
-    </a>`).join('') + (list.length>6?`<div style="font-size:11px;color:#ff8080;align-self:center">超過 6 張，只會儲存前 6 張</div>`:'');
+  const el=document.getElementById('c-menu-images');
+  const lines=(el?.value||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  box.style.flexDirection='column';
+  box.innerHTML = lines.slice(0,8).map((u,i)=>{
+    const info=menuImgInfo(u,400);
+    const over=i>=6;
+    const tile=info.urls.length
+      ? `<a href="${menuImgInfo(u,2000).urls[0]}" target="_blank" rel="noopener" style="position:relative;display:block;width:64px;height:64px;flex-shrink:0;border-radius:6px;overflow:hidden;border:1px solid var(--border);background:var(--dark3)">
+          ${kcImgTag(u,200,'style="width:100%;height:100%;object-fit:cover"','mark')}
+          <div class="img-fail" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;font-size:20px">⚠️</div></a>`
+      : `<div style="width:64px;height:64px;flex-shrink:0;border-radius:6px;border:1px dashed #ff8080;display:flex;align-items:center;justify-content:center;font-size:20px">✕</div>`;
+    const msg=over?'<span style="color:#ff8080">超過 6 張，這張不會儲存</span>'
+      :info.warn?`<span style="color:#ff8080">${info.warn}</span>`
+      :info.drive?'<span style="color:var(--muted)">Google Drive 圖片：若顯示 ⚠️，請確認檔案已設為「知道連結的任何人都能檢視」</span>'
+      :'<span style="color:var(--muted)">若顯示 ⚠️，代表此網址無法直接當圖片使用</span>';
+    return `<div style="display:flex;gap:10px;align-items:center;font-size:11px;line-height:1.5">${tile}<div style="min-width:0"><div style="color:var(--text);font-weight:700">第 ${i+1} 張</div>${msg}<div style="color:var(--faint);word-break:break-all">${u.length>70?u.slice(0,70)+'…':u}</div></div></div>`;
+  }).join('');
 }
 async function saveCampaign(){
   const name=document.getElementById('c-name').value.trim();if(!name){showToast('請輸入團購名稱','error');return;}
@@ -1343,6 +1413,7 @@ async function saveCampaign(){
     return{id,name:pname,price:parseFloat(inputs[1].value)||0,stock:parseInt(inputs[2].value)||999,
       cat:r.dataset.cat||lib?.cat||'',spec:r.dataset.spec||lib?.spec||'',img:r.dataset.img||lib?.img||''};
   }).filter(p=>p.name);
+  if(!prods.length){showToast('請至少加入 1 個品項','error');return;}
   const allowedCodes=getSelectedAllowedCodes();
   const campId=editCampaignId||'';
   const campStatus=document.getElementById('c-status').value;
@@ -1362,6 +1433,20 @@ async function saveCampaign(){
     const data=await apiPost({action:'saveCampaign',campaign});
     if(data.status!=='ok'){showToast(data.message||'儲存失敗','error');return;}
     const savedId=data.id||editCampaignId||campaign.id;
+    // 再次開團：把舊團購的優惠碼專屬規則複製到新團購
+    if(reopenSourceId&&!editCampaignId){
+      let synced=0;
+      for(const pc of promoCodes){
+        let rules=[];try{rules=JSON.parse(pc.campaignRules||'[]');}catch(e){}
+        const src=rules.find(r=>String(r.campaignId)===String(reopenSourceId));
+        if(!src||rules.some(r=>String(r.campaignId)===String(savedId)))continue;
+        rules.push({...src,campaignId:String(savedId)});
+        const r2=await apiPost({action:'savePromoCode',promoCode:{...pc,campaignRules:JSON.stringify(rules)}});
+        if(r2.status==='ok')synced++;
+      }
+      if(synced)setTimeout(()=>showToast(`已將 ${synced} 個優惠碼的規則套用到新團購 ✓`),2600);
+      reopenSourceId=null;
+    }
     if(!editCampaignId)editCampaignId=savedId;
     document.getElementById('camp-link-input').value=buildCampLink(savedId);
     document.getElementById('camp-link-section').style.display='block';
@@ -1369,7 +1454,8 @@ async function saveCampaign(){
     await loadData();
     showToast(`✓ 已儲存「${name}」，共 ${prods.length} 個品項`);
     // Auto-close after 2 seconds
-    setTimeout(()=>closeModal('modal-campaign'),2000);
+    clearTimeout(window._campAutoClose);
+    window._campAutoClose=setTimeout(()=>closeModal('modal-campaign'),2000);
   }catch(e){showToast('儲存失敗：'+e.message,'error');}finally{loading(false);}
 }
 function buildCampLink(id){
@@ -1458,7 +1544,7 @@ async function batchPaid(paid){
   const ids=[...selectedOrderIds];
   loading(true,`更新 ${ids.length} 筆付款狀態…`);
   try{
-    const data=await api('GET',{action:'batchUpdatePaid',orderIds:JSON.stringify(ids),paid:String(paid)});
+    const data=await apiPost({action:'batchUpdatePaid',orderIds:ids,paid:!!paid});
     if(data.status!=='ok'){showToast(data.message||'更新失敗','error');return;}
     // Update local data
     orders.forEach(o=>{if(ids.includes(o.id))o.paid=paid;});
@@ -1506,8 +1592,15 @@ function viewOrder(id){
     <table style="width:100%;border-collapse:collapse;margin-bottom:16px"><thead><tr><th style="text-align:left;padding:8px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">品項</th><th style="text-align:right;padding:8px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">數量</th><th style="text-align:right;padding:8px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)">小計</th></tr></thead>
     <tbody>${items.map(i=>{const sold=soldMap[i.id]||0;const campProd=camp?.products?.find?.(p=>String(p.id)===String(i.id));const stock=parseInt(campProd?.stock)||999;const remaining=Math.max(0,stock-sold);const stockLabel=stock>=999?'':`<span style="font-size:10px;color:${remaining<=0?'#ff8080':'#5dca8a'};margin-left:6px">(剩${remaining}/${stock})</span>`;return`<tr><td style="padding:8px;border-bottom:1px solid var(--border)">${i.name}${stockLabel}</td><td style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">×${i.qty}</td><td style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">$${(i.qty||0)*(i.price||0)}</td></tr>`;}).join('')}</tbody></table>
     <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--dark3);border-radius:8px;margin-bottom:16px">
-      <span style="font-size:13px;color:var(--muted)">原價 $${o.total}</span>
+      <span style="font-size:13px;color:var(--muted)">原價 $${o.total}${(parseFloat(o.total)||0)-(parseFloat(o.discounted)||0)-(parseFloat(o.promoDiscount)||0)>0?`・團購折 $${(parseFloat(o.total)||0)-(parseFloat(o.discounted)||0)-(parseFloat(o.promoDiscount)||0)}`:''}${parseFloat(o.promoDiscount)>0?`・優惠碼 ${o.promoCode} 折 $${o.promoDiscount}`:''}</span>
       <span style="font-family:'Bebas Neue',sans-serif;font-size:28px;color:var(--gold)">$${o.discounted}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;font-size:12px">
+      <div><div style="color:var(--muted);font-size:11px">取貨方式</div>${o.shippingMethod||'—'}${parseFloat(o.shippingFee)>0?`（運費 $${o.shippingFee}）`:''}</div>
+      <div><div style="color:var(--muted);font-size:11px">付款方式</div>${({transfer:'匯款',cash:'現金'})[o.paymentMethod]||o.paymentMethod||'—'}</div>
+      <div><div style="color:var(--muted);font-size:11px">優惠碼</div>${o.promoCode||'—'}</div>
+      <div><div style="color:var(--muted);font-size:11px">應收合計（含運）</div><strong style="color:var(--gold)">$${((parseFloat(o.discounted)||0)+(parseFloat(o.shippingFee)||0)).toLocaleString()}</strong></div>
+      ${o.address?`<div style="grid-column:1/-1"><div style="color:var(--muted);font-size:11px">地址</div>${o.address}</div>`:''}
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between">
       <span>付款狀態：${o.paid?'<span class="badge badge-paid">已付款</span>':'<span class="badge badge-unpaid">未付款</span>'}</span>
@@ -1608,7 +1701,7 @@ async function payBatchPaid(paid){
   const ids=[...selectedPayIds];
   loading(true,`更新 ${ids.length} 筆…`);
   try{
-    const data=await api('GET',{action:'batchUpdatePaid',orderIds:JSON.stringify(ids),paid:String(paid)});
+    const data=await apiPost({action:'batchUpdatePaid',orderIds:ids,paid:!!paid});
     if(data.status!=='ok'){showToast(data.message||'更新失敗','error');return;}
     orders.forEach(o=>{if(ids.includes(o.id))o.paid=paid;});
     clearPaySelection();renderPayment();renderOrders();renderDashboard();
@@ -1639,10 +1732,12 @@ function histCampsTableHtml(list){
 }
 
 function reopenCampaign(id){
+  clearTimeout(window._campAutoClose);
   const c=campaigns.find(x=>String(x.id)===String(id));
   if(!c){showToast('找不到此團購','error');return;}
   // Reset editCampaignId to null = new campaign
   editCampaignId=null;
+  reopenSourceId=String(id);
   document.getElementById('mc-title').textContent='再次開團（套用舊設定）';
   // Pre-fill all settings from old campaign
   populateCampaignSel('c-supplier-sel');
@@ -1651,7 +1746,7 @@ function reopenCampaign(id){
   document.getElementById('c-name').value=c.name+' (複製)';
   document.getElementById('c-deadline').value=''; // Must fill new date
   document.getElementById('c-min').value=c.minPeople||10;
-  const dr2=c.discountRule||(c.discount?{type:'percent',value:String(c.discount)}:null);
+  const dr2=parseDR(c.discountRule)||(c.discount?{type:'percent',value:String(c.discount)}:null);
   if(dr2&&dr2.type&&dr2.type!=='none'){document.getElementById('c-discount-type').value=dr2.type;onDiscountTypeChange(dr2);}
   else{document.getElementById('c-discount-type').value='none';onDiscountTypeChange();}
   document.getElementById('c-status').value='active';
@@ -1805,6 +1900,8 @@ function editProduct(id){const p=products.find(x=>String(x.id)===String(id));if(
 async function saveProduct(){
   const name=document.getElementById('p-name').value.trim();if(!name){showToast('請輸入商品名稱','error');return;}
   const supplierId=document.getElementById('p-supplier').value;if(!supplierId){showToast('請選擇廠商','error');return;}
+  const dupP=products.find(p=>String(p.supplierId)===String(supplierId)&&normName(p.name)===normName(name)&&String(p.id)!==String(editProductId||''));
+  if(dupP){showToast(`此廠商已有同名商品「${dupP.name}」${dupP.active==='false'?'（停用中，可直接啟用）':''}`,'error');return;}
   const product={id:editProductId||'',supplierId,name,cat:document.getElementById('p-cat').value.trim(),price:document.getElementById('p-price').value||0,spec:document.getElementById('p-spec').value.trim(),img:document.getElementById('p-img').value.trim(),active:document.getElementById('p-active').value};
   loading(true,'儲存中…');
   try{const data=await apiPost({action:'saveProduct',product});if(data.status!=='ok'){showToast(data.message||'儲存失敗','error');return;}closeModal('modal-product');await loadData();showToast('商品已儲存 ✓');}
@@ -1812,7 +1909,7 @@ async function saveProduct(){
 }
 async function toggleProductActive(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;const newActive=p.active==='false'?'true':'false';loading(true,'更新中…');try{const data=await apiPost({action:'saveProduct',product:{...p,active:newActive}});if(data.status!=='ok'){showToast(data.message,'error');return;}p.active=newActive;renderProducts();showToast(newActive==='true'?'已啟用 ✓':'已停用');}catch(e){showToast('更新失敗','error');}finally{loading(false);}
 }
-async function deleteProduct(){if(!confirm('確定永久刪除？建議改用「停用」保留歷史資料。'))return;loading(true,'刪除中…');try{await apiPost({action:'deleteRecord',type:'product',id:editProductId});closeModal('modal-product');await loadData();showToast('商品已刪除');}catch(e){showToast('刪除失敗','error');}finally{loading(false);}
+async function deleteProduct(){if(!confirm('確定永久刪除？建議改用「停用」保留歷史資料。'))return;loading(true,'刪除中…');try{const dr=await apiPost({action:'deleteRecord',type:'product',id:editProductId});if(dr.status!=='ok'){showToast(dr.message||'刪除失敗','error');return;}closeModal('modal-product');await loadData();showToast('商品已刪除');}catch(e){showToast('刪除失敗','error');}finally{loading(false);}
 }
 
 function openImportCSV(){csvParsedRows=[];document.getElementById('csv-file-name').textContent='尚未選擇';document.getElementById('csv-file-input').value='';document.getElementById('csv-preview').style.display='none';document.getElementById('import-confirm-btn').disabled=true;document.getElementById('import-mode').value='upsert';updateImportModeDesc();document.getElementById('csv-dup-alert').style.display='none';document.getElementById('modal-import').classList.add('show');}
@@ -2102,7 +2199,8 @@ function buildRuleHtml(rule, idx){
       ${rule.campaignId!=='*'?`<div style="flex:1;min-width:140px">
         <div style="font-size:10px;color:var(--muted);margin-bottom:4px">團購</div>
         <select id="rule-camp-${idx}" onchange="updateRule(${idx},'campaignId',this.value)" style="width:100%;background:var(--dark);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--text);font-family:'Noto Sans TC',sans-serif;outline:none">
-          ${campaigns.filter(c=>c.status!=='closed').map(c=>`<option value="${c.id}" ${String(c.id)===String(rule.campaignId)?'selected':''}>${c.name}</option>`).join('')}
+          ${campaigns.filter(c=>c.status==='active'||c.status==='draft'||String(c.id)===String(rule.campaignId)).map(c=>`<option value="${c.id}" ${String(c.id)===String(rule.campaignId)?'selected':''}>${c.name}${c.status==='closed'?'（已結單）':c.status==='done'?'（已結束）':c.status==='draft'?'（草稿）':''}</option>`).join('')}
+          ${rule.campaignId&&!campaigns.some(c=>String(c.id)===String(rule.campaignId))?`<option value="${rule.campaignId}" selected>（已刪除的團購）</option>`:''}
         </select>
       </div>`:''}
       <div style="flex:1;min-width:140px">
@@ -2132,7 +2230,7 @@ function renderRules(){
   });
 }
 function addCampaignRule(){
-  const activeCamps=campaigns.filter(c=>c.status!=='closed');
+  const activeCamps=campaigns.filter(c=>c.status==='active'||c.status==='draft');
   // Avoid duplicating existing campaignIds
   const usedIds=editingRules.map(r=>r.campaignId);
   const freeCamp=activeCamps.find(c=>!usedIds.includes(String(c.id)))||activeCamps[0];
@@ -2258,7 +2356,7 @@ function openNewAccount(){editAccountId=null;document.getElementById('ma-title')
 function openEditAccount(id){const a=accounts.find(x=>String(x.id)===String(id));if(!a)return;editAccountId=id;document.getElementById('ma-title').textContent='編輯帳號';document.getElementById('a-name').value=a.name;document.getElementById('a-user').value=a.user;document.getElementById('a-user').disabled=true;document.getElementById('a-pass').value='';document.getElementById('a-pass2').value='';document.getElementById('a-role').value=a.role;document.getElementById('a-active').value=a.active;document.getElementById('a-pass-hint').style.display='inline';document.getElementById('a-delete-btn').style.display=a.role!=='root'?'inline-flex':'none';document.getElementById('modal-account').classList.add('show');}
 async function saveAccount(){const name=document.getElementById('a-name').value.trim();const user=document.getElementById('a-user').value.trim();const pass=document.getElementById('a-pass').value;const pass2=document.getElementById('a-pass2').value;if(!name){showToast('請輸入姓名','error');return;}if(!editAccountId&&!user){showToast('請輸入帳號','error');return;}if(pass&&pass!==pass2){showToast('兩次密碼不一致','error');return;}if(pass&&pass.length<4){showToast('密碼至少 4 個字元','error');return;}const account={id:editAccountId||'',user,name,pass:pass||'',role:document.getElementById('a-role').value,active:document.getElementById('a-active').value};loading(true,'儲存中…');try{const data=await apiPost({action:'saveAccount',account});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-account');await loadData();showToast('帳號已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
 }
-async function deleteAccount(){if(!confirm('確定要刪除此帳號？'))return;loading(true,'刪除中…');try{await apiPost({action:'deleteRecord',type:'account',id:editAccountId});closeModal('modal-account');await loadData();showToast('帳號已刪除');}catch(e){showToast('刪除失敗','error');}finally{loading(false);}
+async function deleteAccount(){if(!confirm('確定要刪除此帳號？'))return;loading(true,'刪除中…');try{const dr=await apiPost({action:'deleteRecord',type:'account',id:editAccountId});if(dr.status!=='ok'){showToast(dr.message||'刪除失敗','error');return;}closeModal('modal-account');await loadData();showToast('帳號已刪除');}catch(e){showToast('刪除失敗','error');}finally{loading(false);}
 }
 
 function exportPaidXLSX(){

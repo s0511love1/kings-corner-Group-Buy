@@ -69,7 +69,8 @@ function _kcSetupFixtures() {
                  closedStatus: '', pickupDate: '', note: '', products: products, createdAt: ts() };
   const mk = (id, over) => upsertRow(SH.CAMPAIGNS, headers, Object.assign({}, base, { id: id, name: id }, over), 'id');
 
-  mk('TEST_ACTIVE',       { deadline: tomorrow,  allowedCodes: '["TESTPROMO"]' });
+  mk('TEST_ACTIVE',       { deadline: tomorrow,  allowedCodes: '[]' });            // 白名單沒勾，但優惠碼有專屬規則 → 視同開放
+  mk('TEST_WL',           { deadline: tomorrow,  allowedCodes: '["TESTPROMO"]' }); // 白名單有勾、沒有專屬規則 → 只追蹤不折扣
   mk('TEST_NOWL',         { deadline: tomorrow,  allowedCodes: '[]' });
   mk('TEST_EXP_TEXT',     { deadline: yesterday, allowedCodes: '[]' });
   mk('TEST_EXP_DATE',     { deadline: new Date(yesterday + 'T00:00:00+08:00'), allowedCodes: '[]' });
@@ -78,8 +79,7 @@ function _kcSetupFixtures() {
 
   const dv = JSON.stringify({ threshold: '100', off: '10' });
   const rules = JSON.stringify([
-    { campaignId: 'TEST_ACTIVE', discountType: 'amount_threshold', discountValue: dv },
-    { campaignId: 'TEST_NOWL',   discountType: 'amount_threshold', discountValue: dv }
+    { campaignId: 'TEST_ACTIVE', discountType: 'amount_threshold', discountValue: dv }
   ]);
   upsertRow(SH.PROMO_CODES,
     ['id','code','name','contact','discountType','discountValue','campaignRules','status','note','createdAt'],
@@ -140,27 +140,36 @@ function kcRunAllTests() {
     rec('T3-3', '團購每份折 $3 → 折後 194（偽造 discounted=1 無效）', '194', o ? o.discounted : '無訂單', o && Number(o.discounted) === 194);
 
     // ── T4 優惠碼白名單（空白名單=不允許） ──
-    rec('T4-1', '白名單空白的團購：優惠碼不套用，記為自然流量', '自然流量 / 折扣0', o ? (o.promoCode + ' / ' + o.promoDiscount) : '無訂單',
+    rec('T4-1', '沒有專屬規則、白名單也沒勾：優惠碼不套用，記為自然流量', '自然流量 / 折扣0', o ? (o.promoCode + ' / ' + o.promoDiscount) : '無訂單',
         o && o.promoCode === '自然流量' && Number(o.promoDiscount) === 0);
 
     r = _kcCall(submitOrder, order('TEST_ACTIVE', '0900000002', { promoCode: 'TESTPROMO' }));
     o = r.status === 'ok' ? find(r.orderId) : null;
-    rec('T4-2', '白名單有勾選：優惠碼套用（194 → 每滿100折10 → 折10）', 'TESTPROMO / 折10 / 實付184',
+    rec('T4-2', '有專屬規則（白名單沒勾也可用）：194 → 每滿100折10 → 折10', 'TESTPROMO / 折10 / 實付184',
         o ? (o.promoCode + ' / 折' + o.promoDiscount + ' / 實付' + o.discounted) : (r.message || '無訂單'),
         o && o.promoCode === 'TESTPROMO' && Number(o.promoDiscount) === 10 && Number(o.discounted) === 184);
     const t42Id = o ? o.id : null;
 
     // 優惠碼驗證 API 本身
     const v1 = _kcCall(function () { return validatePromoCode('TESTPROMO', 'TEST_NOWL'); });
-    rec('T4-3', 'validatePromoCode：未勾選的團購回傳錯誤', 'error', v1.status, v1.status === 'error');
+    rec('T4-3', 'validatePromoCode：沒規則也沒勾白名單 → 錯誤', 'error', v1.status, v1.status === 'error');
     const v2 = _kcCall(function () { return validatePromoCode('TESTPROMO', 'TEST_ACTIVE'); });
-    rec('T4-4', 'validatePromoCode：已勾選的團購通過', 'ok', v2.status, v2.status === 'ok');
+    rec('T4-4', 'validatePromoCode：有專屬規則 → 通過', 'ok', v2.status, v2.status === 'ok');
+    r = _kcCall(submitOrder, order('TEST_WL', '0900000009', { promoCode: 'TESTPROMO' }));
+    o = r.status === 'ok' ? find(r.orderId) : null;
+    rec('T4-5', '只勾白名單、沒專屬規則：記錄優惠碼但不折扣（純追蹤）', 'TESTPROMO / 折0 / 194',
+        o ? (o.promoCode + ' / 折' + o.promoDiscount + ' / ' + o.discounted) : (r.message || '無訂單'),
+        o && o.promoCode === 'TESTPROMO' && Number(o.promoDiscount) === 0 && Number(o.discounted) === 194);
 
     // ── T5 運費計入 discounted（行為確認） ──
-    r = _kcCall(submitOrder, order('TEST_ACTIVE', '0900000003', { shippingFee: 65, shippingMethod: '7-11' }));
+    r = _kcCall(submitOrder, order('TEST_ACTIVE', '0900000003', { shippingFee: 65, shippingMethod: '7-11 取貨' }));
     o = r.status === 'ok' ? find(r.orderId) : null;
     rec('T5', '運費 65 不參與折扣：discounted 仍為 194，shippingFee=65', '194 / 65', o ? (o.discounted + ' / ' + o.shippingFee) : (r.message || '無訂單'), o && Number(o.discounted) === 194 && Number(o.shippingFee) === 65,
         '運費獨立欄位，不計入折扣金額');
+
+    r = _kcCall(submitOrder, order('TEST_NOWL', '0900000003', { shippingFee: 1, shippingMethod: '黑貓宅急便' }));
+    o = r.status === 'ok' ? find(r.orderId) : null;
+    rec('T5-2', '偽造運費 $1：後端改回標準運費 170', '170', o ? o.shippingFee : (r.message || '無訂單'), o && Number(o.shippingFee) === 170);
 
     // ── T6 防重複 / 鎖 ──
     r = _kcCall(submitOrder, order('TEST_ACTIVE', '0900000002'));
@@ -241,7 +250,7 @@ function kcDiagnose() {
       const dr = d[i][ci('discountRule')];
       const name = d[i][ci('name')];
       add('進行中團購', name + '｜截止日', kind + ' → ' + norm, !norm ? '⚠ 日期無法辨識（後端不會擋單）' : (exp ? '已過期（status 仍是 active，等自動關閉）' : 'OK'));
-      add('進行中團購', name + '｜開放優惠碼', wl.length ? wl.join(', ') : '(空白)', wl.length ? 'OK' : '⚠ 空白＝所有優惠碼不可用（本次行為變更）');
+      add('進行中團購', name + '｜開放優惠碼', wl.length ? wl.join(', ') : '(空白)', wl.length ? 'OK' : '空白：只有在優惠碼裡為此團購設定專屬規則的碼可用');
       add('進行中團購', name + '｜團購折扣 discountRule', dr || '(無)', dr ? 'OK' : '無折扣（舊團購的 discount 已不再生效）');
     }
   } else add('進行中團購', '—', '團購工作表沒有資料', '');

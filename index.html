@@ -783,13 +783,38 @@ const CAMPAIGNS = [];
 
 
 // ══ 菜單圖片 ══
-// 支援 Google Drive 分享連結 / Imgur 頁面 / 直接圖片網址
-function menuImgUrl(u, w){
-  u = String(u||'').trim(); if(!u) return '';
-  const m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=|thumbnail\?id=)([\w-]{20,})/);
-  if(m) return 'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w' + (w||1600);
-  if(/^https?:\/\/imgur\.com\/\w+$/.test(u)) return u.replace('://imgur.com','://i.imgur.com') + '.jpg';
-  return u;
+// 圖片網址解析：回傳可嘗試的網址清單（第一個失敗會自動換下一個）
+function menuImgInfo(u, w){
+  u = String(u||'').trim(); w = w||1600;
+  if(!u) return { urls:[], warn:'' };
+  if(/drive\.google\.com\/drive\/(u\/\d+\/)?folders\//.test(u)) return { urls:[], warn:'這是 Google Drive「資料夾」連結，請改貼單一圖片檔的分享連結' };
+  if(/photos\.app\.goo\.gl|photos\.google\.com/.test(u)) return { urls:[], warn:'Google 相簿的分享連結無法直接顯示，請改用 Google Drive 或 Imgur' };
+  const m = u.match(/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^#]*&)?id=|thumbnail\?(?:[^#]*&)?id=)([\w-]{20,})/)
+         || u.match(/drive\.usercontent\.google\.com\/(?:download|uc)\?(?:[^#]*&)?id=([\w-]{20,})/)
+         || u.match(/lh3\.googleusercontent\.com\/d\/([\w-]{20,})/);
+  if(m) return { urls:[
+      'https://drive.google.com/thumbnail?id=' + m[1] + '&sz=w' + w,
+      'https://lh3.googleusercontent.com/d/' + m[1] + '=w' + w
+    ], warn:'', drive:true };
+  if(/^https?:\/\/(www\.)?imgur\.com\/(a|gallery)\//.test(u)) return { urls:[], warn:'這是 Imgur「相簿」連結，請在圖片上按右鍵「複製圖片網址」（i.imgur.com 開頭）' };
+  if(/^https?:\/\/(www\.)?imgur\.com\/\w+$/.test(u)) return { urls:[u.replace(/:\/\/(www\.)?imgur\.com/,'://i.imgur.com') + '.jpg'], warn:'' };
+  if(/dropbox\.com\//.test(u)){ const base=u.replace(/([?&])dl=[01]&?/,'$1').replace(/[?&]$/,''); return { urls:[base + (base.includes('?')?'&':'?') + 'raw=1'], warn:'' }; }
+  if(!/^https?:\/\//.test(u)) return { urls:[], warn:'不是有效的網址（需以 http:// 或 https:// 開頭）' };
+  return { urls:[u], warn:'' };
+}
+function menuImgUrl(u, w){ return menuImgInfo(u, w).urls[0] || ''; }
+// <img> 載入失敗時換下一個候選網址；全部失敗才觸發 data-fail 處理
+function kcImgNext(img){
+  let list=[]; try{ list=JSON.parse(img.dataset.alt||'[]'); }catch(e){}
+  if(list.length){ img.dataset.alt=JSON.stringify(list.slice(1)); img.src=list[0]; return; }
+  img.onerror=null;
+  if(img.dataset.fail==='hide'){ const b=img.closest('.menu-thumb'); if(b) b.style.display='none'; }
+  else if(img.dataset.fail==='mark'){ img.style.display='none'; const n=img.parentElement.querySelector('.img-fail'); if(n) n.style.display='flex'; }
+}
+function kcImgTag(u, w, attrs, fail){
+  const info=menuImgInfo(u,w);
+  if(!info.urls.length) return '';
+  return `<img src="${info.urls[0]}" data-alt='${JSON.stringify(info.urls.slice(1))}' data-fail="${fail||''}" onerror="kcImgNext(this)" ${attrs||''}>`;
 }
 function parseMenuImages(v){
   let arr = v;
@@ -797,7 +822,7 @@ function parseMenuImages(v){
     const t = v.trim(); if(!t) return [];
     try{ arr = JSON.parse(t); }catch(e){ arr = t.split(/[\n,]+/); }
   }
-  return Array.isArray(arr) ? arr.map(x=>String(x||'').trim()).filter(Boolean) : [];
+  return Array.isArray(arr) ? arr.map(x=>String(x||'').trim()).filter(x=>x&&menuImgInfo(x).urls.length) : [];
 }
 let MENU_LB = { list:[], i:0 };
 function renderMenuImages(c){
@@ -811,7 +836,7 @@ function renderMenuImages(c){
     return;
   }
   const thumb = (u,i,w) => `<button type="button" class="menu-thumb" onclick="openMenuLb(${i})" aria-label="放大菜單第 ${i+1} 張">
-      <img src="${menuImgUrl(u,w)}" alt="菜單 ${i+1}" loading="lazy" onerror="this.closest('.menu-thumb').style.display='none'">
+      ${kcImgTag(u,w,`alt="菜單 ${i+1}" loading="lazy"`,'hide')}
       ${list.length>1?`<span class="menu-idx">${i+1}/${list.length}</span>`:''}</button>`;
   document.getElementById('menu-strip').innerHTML = list.map((u,i)=>thumb(u,i,400)).join('');
   document.getElementById('menu-aside-list').innerHTML = list.map((u,i)=>thumb(u,i,700)).join('');
@@ -834,7 +859,10 @@ function showLbImg(){
   const stage = document.getElementById('lb-stage');
   stage.classList.remove('zoomed'); stage.scrollTo(0,0);
   document.getElementById('lb-zoom-btn').textContent='🔍 放大';
-  document.getElementById('lb-img').src = menuImgUrl(MENU_LB.list[MENU_LB.i], 2000);
+  const lbImg=document.getElementById('lb-img');
+  const urls=menuImgInfo(MENU_LB.list[MENU_LB.i], 2000).urls;
+  lbImg.dataset.alt=JSON.stringify(urls.slice(1)); lbImg.dataset.fail=''; lbImg.onerror=function(){kcImgNext(this);};
+  lbImg.src = urls[0]||'';
   document.getElementById('lb-count').textContent = (MENU_LB.i+1) + ' / ' + n;
   document.getElementById('lb-prev').style.display = n>1 ? 'flex':'none';
   document.getElementById('lb-next').style.display = n>1 ? 'flex':'none';
@@ -1520,6 +1548,7 @@ async function applyCartPromo(campaignId){
 }
 
 // 開發人員Yungtaitsai
+let cartShippingCharged=false;
 async function submitCart(){
   const name=document.getElementById('cart-name')?.value.trim();
   const phone=document.getElementById('cart-phone')?.value.trim();
@@ -1553,6 +1582,7 @@ async function submitCart(){
   let allSuccess=true;
   const orderIds=[];
   const failedCamps=[];
+  const succeededIds=[];
 
   for(const entry of entries){
     const c=entry.campaign;
@@ -1564,7 +1594,8 @@ async function submitCart(){
     const promoDiscount=disc-applyCampDiscountRule(subtotal,totalQty,c.discountRule||null);
 
     try{
-      const isFirstOrder=orderIds.length===0&&failedCamps.length===0;
+      // 運費只算一次：掛在本次結帳「第一筆成功」的訂單上；若先前部分成功時已收過運費，重試時不再加收
+      const isFirstOrder=orderIds.length===0&&!cartShippingCharged;
       const res=await fetch(GAS_URL,{
         method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
@@ -1585,7 +1616,7 @@ async function submitCart(){
         })
       });
       const data=await res.json();
-      if(data.status==='ok'){orderIds.push(data.orderId);}
+      if(data.status==='ok'){orderIds.push(data.orderId);succeededIds.push(String(c.id));}
       else{allSuccess=false;failedCamps.push(c.name+': '+data.message);}
     }catch(e){allSuccess=false;failedCamps.push(c.name+': 連線失敗');}
   }
@@ -1593,11 +1624,19 @@ async function submitCart(){
   btn.disabled=false;btn.textContent='確認送出訂單';
 
   if(allSuccess){
+    cartShippingCharged=false;
     const savedName=name, savedPhone=phone;
     cart={};updateCartBadge();
     closeCartPage();
     showCartSuccess(savedName,savedPhone,orderIds,shipLabel,shippingFee);
   } else {
+    // 已成功的團購從購物車移除，避免重試時被「重複下單」擋下
+    if(orderIds.length){
+      cartShippingCharged=true;
+      succeededIds.forEach(id=>{delete cart[id];});
+      updateCartBadge();
+      try{saveCartToStorage&&saveCartToStorage();}catch(e){}
+    }
     // Mark inactive items in cart based on error messages
     failedCamps.forEach(f => {
       const colonIdx=f.indexOf(': ');
@@ -1631,7 +1670,7 @@ async function submitCart(){
         </button>`:''}
       </div>`;
     }).join('');
-    errEl.innerHTML = `<div style="font-size:13px;font-weight:700;color:#c0392b;margin-bottom:8px">⚠️ 部分訂單未成功送出</div>${failHtml}
+    errEl.innerHTML = `${orderIds.length?`<div style="background:#f0faf3;border:1px solid #bfe5cc;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:#2e7d32">✅ 已成功送出 ${orderIds.length} 筆（訂單編號：${orderIds.join('、')}），已從購物車移除${shippingFee>0?'，運費已計入第一筆':''}</div>`:''}<div style="font-size:13px;font-weight:700;color:#c0392b;margin-bottom:8px">⚠️ 部分訂單未成功送出</div>${failHtml}
       <div style="font-size:12px;color:#888;margin-top:8px">移除問題商品後，點「確認送出訂單」重試</div>`;
     errEl.style.display='block';
     errEl.scrollIntoView({behavior:'smooth',block:'center'});

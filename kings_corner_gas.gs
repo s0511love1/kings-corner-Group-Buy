@@ -127,6 +127,9 @@ function sheetToObjects(name) {
       const v = row[i];
       // Normalize: Sheets stores booleans as true/false (JS boolean), stringify them
       if (typeof v === 'boolean') obj[h] = String(v);
+      // Sheets 會把「2026-10-06 14:00:00」「06/28」這類文字自動轉成日期 → 讀回時轉回台北時間文字
+      else if (v instanceof Date && (h === 'ts' || h === 'createdAt')) obj[h] = Utilities.formatDate(v, 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
+      else if (v instanceof Date && h === 'pickupDate') obj[h] = Utilities.formatDate(v, 'Asia/Taipei', 'MM/dd');
       else obj[h] = v ?? '';
     });
     return obj;
@@ -259,7 +262,7 @@ function addCors(output) {
 // ════════════════════════════════════════════════════════════
 function doGet(e) {
   try {
-    initSheets();
+    initSheetsCached();
     const action = e.parameter.action || '';
     const token  = e.parameter.token  || '';
 
@@ -330,7 +333,7 @@ function doGet(e) {
 // ════════════════════════════════════════════════════════════
 function doPost(e) {
   try {
-    initSheets();
+    initSheetsCached();
     const body   = JSON.parse(e.postData.contents || '{}');
     const action = body.action || '';
     const token  = body.token  || '';
@@ -498,6 +501,9 @@ function getCampaignsPublic() {
   return ok({ campaigns: active, closedCamps, suppliers, ads, marketing: mkt });
 }
 
+// 取貨方式與運費（需與 index.html 的 SHIPPING_OPTIONS 一致）
+const SHIPPING_FEES = { '自取': 0, '7-11 取貨': 65, '黑貓宅急便': 170 };
+
 function submitOrder(body) {
   const { name, phone, campaignId, campaignName, items } = body;
   if (!name || !phone) return err('姓名與手機為必填');
@@ -614,14 +620,16 @@ function submitOrder(body) {
     const orderId = 'KC' + new Date().getTime() + Math.floor(Math.random()*900+100);
     const itemCount = totalQty;
 
-    const shippingMethod = body.shippingMethod || '自取';
-    const shippingFee    = parseFloat(body.shippingFee) || 0;
+    // 運費只有兩種：原價或免運（0）。不接受前端傳來的其他金額
+    const shippingMethod = SHIPPING_FEES.hasOwnProperty(body.shippingMethod) ? body.shippingMethod : '自取';
+    const reqFee         = parseFloat(body.shippingFee) || 0;
+    const shippingFee    = reqFee === 0 ? 0 : SHIPPING_FEES[shippingMethod];
     const paymentMethod  = body.paymentMethod || '匯款';
     const address         = body.address || '';
 
     const headers = ['id','campaignId','campaignName','supplierId','name','phone','items','itemCount','total','discounted','promoCode','promoDiscount','shippingMethod','shippingFee','paymentMethod','address','paid','ts'];
     upsertRow(SH.ORDERS, headers, {
-      id: orderId, campaignId, campaignName: campaignName || camp.name || '',
+      id: orderId, campaignId, campaignName: camp.name || campaignName || '',
       supplierId, name, phone,
       items: JSON.stringify(priceLockedItems),
       itemCount, total: subtotal, discounted: discounted,
@@ -647,6 +655,7 @@ function getAllData(user) {
   const campaigns = sheetToObjects(SH.CAMPAIGNS).map(c => {
     try { c.products = JSON.parse(c.products || '[]'); } catch(e) { c.products = []; }
     if (c.deadline) c.deadline = toTaipeiDateStr(c.deadline) || String(c.deadline);
+    c.discountRule = parseCampDiscount(c) || '';
     return c;
   });
   const orders = sheetToObjects(SH.ORDERS).map(o => {
@@ -704,6 +713,8 @@ function saveCampaign(body, user) {
   if (!c.closedStatus) c.closedStatus = '';
   if (!c.pickupDate) c.pickupDate = '';
   if (!c || !c.name) return err('團購名稱為必填');
+  const prodList = typeof c.products === 'string' ? (function(){ try { return JSON.parse(c.products || '[]'); } catch(e) { return []; } })() : (c.products || []);
+  if (!prodList.length) return err('團購至少需要 1 個品項');
   if (!c.id) c.id = 'C' + new Date().getTime();
   if (!c.createdAt) c.createdAt = ts();
   c.products = JSON.stringify(c.products || []);
@@ -737,6 +748,9 @@ function saveProduct(body, user) {
   let p = body.product;
   if (typeof p === 'string') try { p = JSON.parse(p); } catch(e) {}
   if (!p || !p.name) return err('商品名稱為必填');
+  const dupProd = sheetToObjects(SH.PRODUCTS).find(e =>
+    String(e.supplierId) === String(p.supplierId) && normName(e.name) === normName(p.name) && String(e.id) !== String(p.id || ''));
+  if (dupProd) return err('此廠商已有同名商品「' + dupProd.name + '」' + (String(dupProd.active) === 'false' ? '（目前停用中，可直接啟用）' : ''));
   if (!p.id) p.id = 'P' + new Date().getTime();
   const headers = ['id','supplierId','name','cat','spec','price','img','active'];
   upsertRow(SH.PRODUCTS, headers, p, 'id');
@@ -886,14 +900,14 @@ function saveAccount(body, user) {
   // New account
   if (!acc.id) {
     const existing = sheetToObjects(SH.ACCOUNTS);
-    if (existing.find(a => a.user === acc.user)) return err('帳號名稱已存在');
+    if (existing.find(a => String(a.user).toLowerCase() === String(acc.user).toLowerCase())) return err('帳號名稱已存在');
     if (!acc.pass) return err('新帳號需設定密碼');
     acc.id = 'A' + new Date().getTime();
     acc.passHash = hashPass(acc.pass);
     acc.createdAt = ts();
   } else {
     // Update — only change passHash if new pass provided
-    const existing = sheetToObjects(SH.ACCOUNTS).find(a => a.id === acc.id);
+    const existing = sheetToObjects(SH.ACCOUNTS).find(a => String(a.id) === String(acc.id));
     if (!existing) return err('找不到帳號');
     acc.passHash = acc.pass ? hashPass(acc.pass) : existing.passHash;
   }
@@ -905,6 +919,16 @@ function saveAccount(body, user) {
 function deleteRecord(body, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
   const { type, id } = body;
+  if (type === 'account') {
+    if (user.role !== 'root') return err('只有 ROOT 可以刪除帳號');
+    if (String(id) === String(user.id)) return err('不能刪除自己目前登入的帳號');
+    const accs = sheetToObjects(SH.ACCOUNTS);
+    const target = accs.find(a => String(a.id) === String(id));
+    if (!target) return err('找不到帳號');
+    if (target.role === 'root' && accs.filter(a => a.role === 'root').length <= 1) return err('至少需保留一個 ROOT 帳號');
+    deleteRow(SH.ACCOUNTS, 'id', id);
+    return ok({});
+  }
   const map = { supplier: SH.SUPPLIERS, product: SH.PRODUCTS, campaign: SH.CAMPAIGNS };
   if (!map[type]) return err('無效的類型');
   deleteRow(map[type], 'id', id);
@@ -1353,7 +1377,16 @@ function fixPhoneNumbers() {
   Logger.log('→ 已將 phone 欄位格式設為文字，往後下單不會再被吃掉開頭0');
 }
 
+// 每次請求都檢查 8 張工作表很慢（每次多 1~2 秒）→ 6 小時內只檢查一次
+function initSheetsCached() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('kc_init_ok')) return;
+  initSheets();
+  cache.put('kc_init_ok', '1', 21600);
+}
+
 function setup() {
+  CacheService.getScriptCache().remove('kc_init_ok');
   initSheets();
   Logger.log('✓ King\'s Corner Sheets 初始化完成');
   Logger.log('預設帳號: root / root1234');
