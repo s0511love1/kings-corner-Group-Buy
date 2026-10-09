@@ -53,6 +53,7 @@ function kcCleanup() {
   const a = _kcDeleteRows(SH.CAMPAIGNS, o => isTest(o.id));
   const b = _kcDeleteRows(SH.ORDERS, o => isTest(o.campaignId));
   const c = _kcDeleteRows(SH.PROMO_CODES, o => isTest(o.id));
+  if (SH.ARCHIVE) _kcDeleteRows(SH.ARCHIVE, o => isTest(o.campaignId));
   const msg = '已清除測試資料：團購 ' + a + ' 筆、訂單 ' + b + ' 筆、優惠碼 ' + c + ' 筆';
   Logger.log(msg);
   try { SpreadsheetApp.getUi().alert(msg); } catch (e) {}

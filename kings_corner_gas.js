@@ -5,7 +5,7 @@
 //  存取權限：所有人（含匿名）
 // ════════════════════════════════════════════════════════════
 
-const SHEET_ID = 'YOUR_GOOGLE_SHEET_ID'; // ← 換成你的 Sheets ID
+const SHEET_ID = '14eFNEzc7VS3hvaYB4WuilNnqqQmKkx8N8Zgdzdihqkk'; // ← 換成你的 Sheets ID
 
 // 工作表名稱
 const SH = {
@@ -17,11 +17,92 @@ const SH = {
   ADS:        '廣告',
   MARKETING:  '行銷設定',
   PROMO_CODES:'優惠碼',
+  ARCHIVE:    '訂單封存',
 };
 
 // ── 工具函式 ──────────────────────────────────────────────
 function ss()  { return SpreadsheetApp.openById(SHEET_ID); }
 function ts()  { return Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss'); }
+
+// ── 全域折扣計算 helper（getCampaignsPublic / submitOrder 共用）──
+function parseCampDiscount(c) {
+  if (!c || !c.discountRule || c.discountRule === '') return null;
+  try {
+    const r = typeof c.discountRule === 'string' ? JSON.parse(c.discountRule) : c.discountRule;
+    if (r && r.type) return r;
+    return null;
+  } catch(e) { return null; }
+}
+
+// 計算團購折扣的「折扣金額」（非折後金額）
+// subtotal：所有品項原價小計，totalQty：所有品項總數量
+function campDiscountAmount(subtotal, totalQty, rule) {
+  if (!rule || rule.type === 'none') return 0;
+  if (rule.type === 'percent') {
+    const pct = parseFloat(rule.value || 100) / 100;
+    return Math.round(subtotal * (1 - pct));
+  }
+  if (rule.type === 'amount_per_unit') {
+    return Math.round(parseFloat(rule.perUnit || rule.value || 0) * totalQty);
+  }
+  if (rule.type === 'amount_threshold') {
+    const threshold = parseFloat(rule.threshold || 1);
+    const off = parseFloat(rule.off || 0);
+    return Math.floor(subtotal / threshold) * off;
+  }
+  return 0;
+}
+
+// 計算優惠碼折扣的「折扣金額」，套用在團購折後金額上（Layer 2）
+function promoDiscountAmount(afterCampAmount, totalQty, promoResult) {
+  if (!promoResult || !promoResult.valid || promoResult.discountType === 'none') return 0;
+  let cfg = {};
+  try { cfg = JSON.parse(promoResult.discountValue || '{}'); } catch(e) {}
+  if (promoResult.discountType === 'percent') {
+    const pct = parseFloat(cfg.value || 100) / 100;
+    return Math.round(afterCampAmount * (1 - pct));
+  }
+  if (promoResult.discountType === 'amount_per_unit') {
+    return Math.round(parseFloat(cfg.perUnit || cfg.value || 0) * totalQty);
+  }
+  if (promoResult.discountType === 'amount_threshold') {
+    const threshold = parseFloat(cfg.threshold || 1);
+    const off = parseFloat(cfg.off || 0);
+    return Math.floor(afterCampAmount / threshold) * off;
+  }
+  return 0;
+}
+
+// 統一截止日判斷：以「截止日當天 23:59:59（台北時間）」為準
+// 回傳 true 代表已截止
+function isCampaignExpired(deadlineStr) {
+  const d = toTaipeiDateStr(deadlineStr);
+  if (!d) return false;
+  const deadlineEnd = new Date(d + 'T23:59:59+08:00');
+  if (isNaN(deadlineEnd.getTime())) return false;
+  return new Date() > deadlineEnd;
+}
+
+// 把 Sheets 可能讀出的各種日期形態，統一轉成台北時間的 'yyyy-MM-dd'
+//  - Date 物件（儲存格是日期格式）
+//  - ISO 字串 '2026-06-24T16:00:00.000Z'（= 台北 6/25，不可直接切掉 T 後面）
+//  - 純文字 '2026-06-25' 或 '2026/6/25'
+function toTaipeiDateStr(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (v instanceof Date) {
+    return isNaN(v.getTime()) ? '' : Utilities.formatDate(v, 'Asia/Taipei', 'yyyy-MM-dd');
+  }
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}T.*(Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+    const dt = new Date(s);
+    return isNaN(dt.getTime()) ? '' : Utilities.formatDate(dt, 'Asia/Taipei', 'yyyy-MM-dd');
+  }
+  const m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  return '';
+}
+
+
 function ok(data)  { return jsonOut({ status:'ok', ...data }); }
 function err(msg)  { return jsonOut({ status:'error', message: msg }); }
 function jsonOut(obj) {
@@ -30,6 +111,11 @@ function jsonOut(obj) {
 }
 
 // 讀取工作表 → [{col:val, ...}, ...]
+// 名稱正規化：全形轉半形、去除所有空白、英文轉小寫（用於重複比對）
+function normName(s) {
+  return String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+}
+
 function sheetToObjects(name) {
   const sheet = ss().getSheetByName(name);
   if (!sheet) return [];
@@ -42,6 +128,9 @@ function sheetToObjects(name) {
       const v = row[i];
       // Normalize: Sheets stores booleans as true/false (JS boolean), stringify them
       if (typeof v === 'boolean') obj[h] = String(v);
+      // Sheets 會把「2026-10-06 14:00:00」「06/28」這類文字自動轉成日期 → 讀回時轉回台北時間文字
+      else if (v instanceof Date && (h === 'ts' || h === 'createdAt')) obj[h] = Utilities.formatDate(v, 'Asia/Taipei', 'yyyy-MM-dd HH:mm:ss');
+      else if (v instanceof Date && h === 'pickupDate') obj[h] = Utilities.formatDate(v, 'Asia/Taipei', 'MM/dd');
       else obj[h] = v ?? '';
     });
     return obj;
@@ -96,10 +185,19 @@ function upsertRow(sheetName, headers, record, idField) {
     });
   }
 
+  // 避免 phone 開頭的 0 被 Sheets 自動轉成數字吃掉：寫入前強制該欄位格式為文字
+  function forceTextFormatForPhoneCol(actualHeaders, rowIndex) {
+    const phoneColIdx = actualHeaders.indexOf('phone');
+    if (phoneColIdx >= 0) {
+      sheet.getRange(rowIndex, phoneColIdx + 1).setNumberFormat('@');
+    }
+  }
+
   // Update existing row
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][idCol]) === String(record[idField])) {
       const rowVals = buildRow(hRow);
+      forceTextFormatForPhoneCol(hRow, i + 1);
       sheet.getRange(i + 1, 1, 1, hRow.length).setValues([rowVals]);
       return;
     }
@@ -107,7 +205,10 @@ function upsertRow(sheetName, headers, record, idField) {
   // Insert new row — use actual headers after ensureSheet added any missing cols
   const freshHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const rowVals = buildRow(freshHeaders);
-  sheet.appendRow(rowVals);
+  const newRowIndex = sheet.getLastRow() + 1;
+  // 不用 appendRow：appendRow 會插入新列、忽略事先設好的「純文字」格式，導致電話開頭 0 被吃掉
+  forceTextFormatForPhoneCol(freshHeaders, newRowIndex);
+  sheet.getRange(newRowIndex, 1, 1, rowVals.length).setValues([rowVals]);
 }
 
 // 刪除一列（依 idField 比對）
@@ -135,9 +236,10 @@ function initSheets() {
   }
 
   // 其他工作表預建
-  ensureSheet(SH.SUPPLIERS, ['id','name','cat','contact','note','createdAt']);
+  ensureSheet(SH.SUPPLIERS, ['id','name','cat','contact','note','createdAt','costRate']);
+  ensureSheet(SH.ARCHIVE,   ORDER_HEADERS.concat(['archivedAt']));
   ensureSheet(SH.PRODUCTS,  ['id','supplierId','name','cat','spec','price','img','active']);
-  ensureSheet(SH.CAMPAIGNS, ['id','name','supplierId','deadline','minPeople','discountRule','status','closedStatus','pickupDate','note','products','allowedCodes','createdAt']);
+  ensureSheet(SH.CAMPAIGNS, ['id','name','supplierId','deadline','minPeople','discountRule','status','closedStatus','pickupDate','note','products','allowedCodes','createdAt','menuImages']);
   ensureSheet(SH.ORDERS,    ['id','campaignId','campaignName','supplierId','name','phone','items','itemCount','total','discounted','paid','ts']);
   ensureSheet(SH.ADS,       ['supplierId','slides']); // slides 存 JSON
   ensureSheet(SH.MARKETING,   ['key','value']);
@@ -163,7 +265,7 @@ function addCors(output) {
 // ════════════════════════════════════════════════════════════
 function doGet(e) {
   try {
-    initSheets();
+    initSheetsCached();
     const action = e.parameter.action || '';
     const token  = e.parameter.token  || '';
 
@@ -222,6 +324,7 @@ function doGet(e) {
     if (action === 'deletePromoCode') return deletePromoCode(e.parameter.id, user);
     if (action === 'batchUpdatePaid') return batchUpdatePaid({ orderIds: JSON.parse(e.parameter.orderIds || '[]'), paid: e.parameter.paid === 'true' }, user);
     if (action === 'getPromoStats')   return getPromoStats(e.parameter.code, e.parameter.from, e.parameter.to, user);
+    if (action === 'getArchive')      return getArchive(user);
 
     return err('未知的 action: ' + action);
   } catch(ex) {
@@ -234,7 +337,7 @@ function doGet(e) {
 // ════════════════════════════════════════════════════════════
 function doPost(e) {
   try {
-    initSheets();
+    initSheetsCached();
     const body   = JSON.parse(e.postData.contents || '{}');
     const action = body.action || '';
     const token  = body.token  || '';
@@ -259,6 +362,8 @@ function doPost(e) {
     if (action === 'batchUpdatePaid') return addCorsHeaders(batchUpdatePaid(body, user));
     if (action === 'savePromoCode')  return addCorsHeaders(savePromoCode(body, user));
     if (action === 'deletePromoCode') return addCorsHeaders(deletePromoCode(body.id, user));
+    if (action === 'archiveSweep')    return addCorsHeaders(archiveSweep(user));
+    if (action === 'getArchive')      return addCorsHeaders(getArchive(user));
 
     return addCorsHeaders(err('未知的 action: ' + action));
   } catch(ex) {
@@ -329,17 +434,27 @@ function getCampaignsPublic() {
     .map(c => {
       try { c.products = JSON.parse(c.products || '[]'); } catch(e) { c.products = []; }
       // Normalize deadline: handle Date objects or strings from Sheets
-      if (c.deadline) {
-        if (c.deadline instanceof Date) {
-          c.deadline = Utilities.formatDate(c.deadline, 'Asia/Taipei', 'yyyy-MM-dd');
-        } else if (String(c.deadline).includes('T')) {
-          c.deadline = String(c.deadline).split('T')[0];
-        } else {
-          c.deadline = String(c.deadline);
-        }
-      }
+      // 統一用台北時區換算（ISO 字串直接切 'T' 會差一天）
+      if (c.deadline) c.deadline = toTaipeiDateStr(c.deadline) || String(c.deadline);
+      try { c.menuImages = JSON.parse(c.menuImages || '[]'); } catch(e) { c.menuImages = []; }
       return c;
     });
+
+  // 團購商品若缺分類／規格／圖片，從商品庫補上（以「廠商＋商品名稱」比對）
+  const libProds = sheetToObjects(SH.PRODUCTS);
+  active.forEach(c => {
+    c.products = (c.products || []).map(p => {
+      if (p.cat && p.spec !== undefined && p.img) return p;
+      const lib = libProds.find(l => String(l.supplierId) === String(c.supplierId) && normName(l.name) === normName(p.name))
+               || libProds.find(l => normName(l.name) === normName(p.name));
+      if (!lib) return p;
+      return Object.assign({}, p, {
+        cat:  p.cat  || lib.cat  || '',
+        spec: p.spec || lib.spec || '',
+        img:  p.img  || lib.img  || '',
+      });
+    });
+  });
 
   const suppliers = sheetToObjects(SH.SUPPLIERS);
   const adsRaw = sheetToObjects(SH.ADS);
@@ -363,30 +478,8 @@ function getCampaignsPublic() {
     c.orderCount = campOrders.length;
   });
 
-  // Helper：解析 discountRule
-  function parseCampDiscount(c) {
-    if (!c.discountRule || c.discountRule === '') return null;
-    try {
-      const r = typeof c.discountRule === 'string' ? JSON.parse(c.discountRule) : c.discountRule;
-      if (r && r.type) return r;
-      return null;
-    } catch(e) { return null; }
-  }
+  // Helper：解析 discountRule / applyCampDiscount 現為全域函式（見檔案底部）
 
-  // Helper：計算單一品項的團購折後價
-  function applyCampDiscount(price, qty, rule) {
-    if (!rule) return price * qty;
-    const total = price * qty;
-    if (rule.type === 'percent') {
-      return Math.round(total * (parseFloat(rule.value) / 100));
-    } else if (rule.type === 'amount_per_unit') {
-      return Math.round(total - (parseFloat(rule.perUnit || rule.value || 0) * qty));
-    } else if (rule.type === 'amount_threshold') {
-      const off = Math.floor(total / parseFloat(rule.threshold || 1)) * parseFloat(rule.off || 0);
-      return Math.round(total - off);
-    }
-    return total;
-  }
 
   active.forEach(c => {
     // Real order count
@@ -414,32 +507,48 @@ function getCampaignsPublic() {
   return ok({ campaigns: active, closedCamps, suppliers, ads, marketing: mkt });
 }
 
+// 取貨方式與運費（需與 index.html 的 SHIPPING_OPTIONS 一致）
+const SHIPPING_FEES = { '自取': 0, '7-11 取貨': 65, '黑貓宅急便': 170 };
+
 function submitOrder(body) {
-  const { name, phone, campaignId, campaignName, items, total, discounted } = body;
+  const { name, phone, campaignId, campaignName, items } = body;
   if (!name || !phone) return err('姓名與手機為必填');
   if (!/^09\d{8}$/.test(phone)) return err('手機號碼格式錯誤');
   if (!items || !items.length) return err('請選擇商品');
 
-  // 防重複下單：同手機號 + 同團購
-  const existing = sheetToObjects(SH.ORDERS);
-  const dup = existing.find(o =>
-    String(o.campaignId) === String(campaignId) && o.phone === phone
-  );
-  if (dup) return err('此手機號碼已在本次團購中下單，如需修改請聯絡管理員');
-
-  // 取得廠商 ID
+  // 取得團購資料
   const campaigns = sheetToObjects(SH.CAMPAIGNS);
   const camp = campaigns.find(c => String(c.id) === String(campaignId));
-  const supplierId = camp ? camp.supplierId : '';
+  if (!camp) return err('找不到此團購，請重新整理頁面');
 
-  // ── 庫存驗證 ──
-  const campForStock = campaigns.find(c => String(c.id) === String(campaignId));
-  if (campForStock) {
+  // ── 狀態與截止日驗證 ──
+  if (camp.status !== 'active') return err('此團購目前非進行中，無法下單');
+  if (isCampaignExpired(camp.deadline)) return err('此團購已截止下單，請重新整理頁面');
+
+  const supplierId = camp.supplierId || '';
+
+  // ── 加鎖：避免連點造成重複下單 / 超賣 ──
+  const lock = LockService.getScriptLock();
+  let gotLock = false;
+  try {
+    gotLock = lock.tryLock(15000);
+    if (!gotLock) return err('系統忙碌中，請稍後再試一次');
+
+    // 防重複下單：同手機號 + 同團購（防呆：容忍舊資料開頭0被吃掉）
+    const phoneNoZero = phone.replace(/^0/, '');
+    const existing = sheetToObjects(SH.ORDERS);
+    const dup = existing.find(o => {
+      const p = String(o.phone || '');
+      return String(o.campaignId) === String(campaignId) &&
+        (p === phone || p === phoneNoZero || p.replace(/^0/, '') === phoneNoZero);
+    });
+    if (dup) return err('此手機號碼已在本次團購中下單，如需修改請聯絡管理員');
+
+    // ── 商品資料 + 庫存驗證 + 權威單價 ──
     let campProducts = [];
-    try { campProducts = JSON.parse(campForStock.products || '[]'); } catch(e) {}
+    try { campProducts = JSON.parse(camp.products || '[]'); } catch(e) {}
 
-    // Calculate sold qty
-    const existingOrders = sheetToObjects(SH.ORDERS).filter(o => String(o.campaignId) === String(campaignId));
+    const existingOrders = existing.filter(o => String(o.campaignId) === String(campaignId));
     const soldMap = {};
     existingOrders.forEach(o => {
       let oi = [];
@@ -447,70 +556,102 @@ function submitOrder(body) {
       oi.forEach(i => { soldMap[i.id] = (soldMap[i.id] || 0) + (parseInt(i.qty) || 0); });
     });
 
-    // Query product library once (outside loop for efficiency)
     const allProducts = sheetToObjects(SH.PRODUCTS);
     const failures = [];
     const inactiveItems = [];
+    const invalidItems = [];
+    let subtotal = 0;
+    let totalQty = 0;
+    const priceLockedItems = [];
+
     items.forEach(item => {
       const prod = campProducts.find(p => String(p.id) === String(item.id));
-      if (!prod) return;
+      if (!prod) { invalidItems.push(item.name || item.id); return; }
+
       // Check if product is active in product library (by id or by name as fallback)
       const libProd = allProducts.find(p => String(p.id) === String(item.id))
                    || allProducts.find(p => p.name === item.name);
       if (libProd) {
         const activeVal = libProd.active;
-        // Normalize all forms: false, 'false', 'FALSE', FALSE
-        const isInactive = activeVal === false ||
-          String(activeVal).toUpperCase() === 'FALSE';
-        if (isInactive) {
-          inactiveItems.push(item.name);
-          return;
-        }
+        const isInactive = activeVal === false || String(activeVal).toUpperCase() === 'FALSE';
+        if (isInactive) { inactiveItems.push(item.name); return; }
       }
+
       const stock = parseInt(prod.stock) || 999;
       const sold = soldMap[item.id] || 0;
       const remaining = Math.max(0, stock - sold);
-      if ((parseInt(item.qty) || 0) > remaining) {
-        failures.push({ name: item.name, ordered: item.qty, remaining });
+      const q = parseInt(item.qty) || 0;
+      if (q > remaining) {
+        failures.push({ name: item.name, ordered: q, remaining });
+        return;
       }
+
+      // 權威單價：以團購內設定的價格為準，不信任前端傳來的 price
+      const authoritativePrice = parseFloat(prod.price) || 0;
+      subtotal += authoritativePrice * q;
+      totalQty += q;
+      priceLockedItems.push({ id: item.id, name: item.name, qty: q, price: authoritativePrice });
     });
+
+    if (invalidItems.length > 0) {
+      return err('以下商品資料有誤，請重新整理頁面後再試：' + invalidItems.join('、'));
+    }
     if (inactiveItems.length > 0) {
       return err('以下商品已停售，請移除後再下單：' + inactiveItems.join('、'));
     }
-
     if (failures.length > 0) {
       const msg = failures.map(f => `${f.name}：你訂 ${f.ordered} 份，剩餘 ${f.remaining} 份`).join('、');
       return err('庫存不足：' + msg);
     }
+
+    // ── 後端權威金額計算（不信任前端傳來的 total/discounted）──
+    const campRule = parseCampDiscount(camp);
+    const campDisc = campDiscountAmount(subtotal, totalQty, campRule);
+    const afterCamp = subtotal - campDisc;
+
+    let promoCode = (body.promoCode || '').trim();
+    let promoDiscount = 0;
+    let promoValidated = false;
+    if (promoCode) {
+      let pv = {};
+      try { pv = JSON.parse(validatePromoCode(promoCode, campaignId).getContent()); } catch(e) {}
+      if (pv.status === 'ok' && pv.valid) {
+        promoDiscount = promoDiscountAmount(afterCamp, totalQty, pv);
+        promoValidated = true;
+      }
+      // 驗證失敗（例如已停用/白名單不符）→ 不套用折扣，不擋單，但金額以原價計
+    }
+    const discounted = Math.max(0, afterCamp - promoDiscount);
+
+    const orderId = 'KC' + new Date().getTime() + Math.floor(Math.random()*900+100);
+    const itemCount = totalQty;
+
+    // 運費只有兩種：原價或免運（0）。不接受前端傳來的其他金額
+    const shippingMethod = SHIPPING_FEES.hasOwnProperty(body.shippingMethod) ? body.shippingMethod : '自取';
+    const reqFee         = parseFloat(body.shippingFee) || 0;
+    const shippingFee    = reqFee === 0 ? 0 : SHIPPING_FEES[shippingMethod];
+    const paymentMethod  = body.paymentMethod || '匯款';
+    const address         = body.address || '';
+
+    const headers = ['id','campaignId','campaignName','supplierId','name','phone','items','itemCount','total','discounted','promoCode','promoDiscount','shippingMethod','shippingFee','paymentMethod','address','paid','ts'];
+    upsertRow(SH.ORDERS, headers, {
+      id: orderId, campaignId, campaignName: camp.name || campaignName || '',
+      supplierId, name, phone,
+      items: JSON.stringify(priceLockedItems),
+      itemCount, total: subtotal, discounted: discounted,
+      promoCode: promoValidated ? promoCode : '自然流量',
+      promoDiscount: promoDiscount,
+      shippingMethod, shippingFee, paymentMethod, address,
+      paid: 'false', ts: ts()
+    }, 'id');
+
+    // #12 LINE Notify 通知
+    sendLineNotify(buildOrderNotifyMsg(name, phone, campaignName || camp.name || '', priceLockedItems, discounted + shippingFee, orderId));
+
+    return ok({ orderId, message: '訂單已送出' });
+  } finally {
+    if (gotLock) lock.releaseLock();
   }
-
-  const orderId = 'KC' + new Date().getTime();
-  const itemsStr = items.map(i => `${i.name}×${i.qty}`).join('、');
-  const itemCount = items.reduce((s, i) => s + (parseInt(i.qty) || 0), 0);
-  const promoCode    = body.promoCode    || '';
-  const promoDiscount = parseFloat(body.promoDiscount) || 0;
-
-  const shippingMethod = body.shippingMethod || '自取';
-  const shippingFee    = parseFloat(body.shippingFee) || 0;
-  const paymentMethod  = body.paymentMethod || '匯款';
-  const address        = body.address || '';
-
-  const headers = ['id','campaignId','campaignName','supplierId','name','phone','items','itemCount','total','discounted','promoCode','promoDiscount','shippingMethod','shippingFee','paymentMethod','address','paid','ts'];
-  upsertRow(SH.ORDERS, headers, {
-    id: orderId, campaignId, campaignName: campaignName || '',
-    supplierId, name, phone,
-    items: JSON.stringify(items),
-    itemCount, total: total || 0, discounted: discounted || 0,
-    promoCode: promoCode || '自然流量',
-    promoDiscount: promoDiscount || 0,
-    shippingMethod, shippingFee, paymentMethod, address,
-    paid: 'false', ts: ts()
-  }, 'id');
-
-  // #12 LINE Notify 通知
-  sendLineNotify(buildOrderNotifyMsg(name, phone, campaignName || camp?.name || '', items, discounted || 0, orderId));
-
-  return ok({ orderId, message: '訂單已送出' });
 }
 
 // ════════════════════════════════════════════════════════════
@@ -519,15 +660,8 @@ function submitOrder(body) {
 function getAllData(user) {
   const campaigns = sheetToObjects(SH.CAMPAIGNS).map(c => {
     try { c.products = JSON.parse(c.products || '[]'); } catch(e) { c.products = []; }
-    if (c.deadline) {
-      if (c.deadline instanceof Date) {
-        c.deadline = Utilities.formatDate(c.deadline, 'Asia/Taipei', 'yyyy-MM-dd');
-      } else if (String(c.deadline).includes('T')) {
-        c.deadline = String(c.deadline).split('T')[0];
-      } else {
-        c.deadline = String(c.deadline);
-      }
-    }
+    if (c.deadline) c.deadline = toTaipeiDateStr(c.deadline) || String(c.deadline);
+    c.discountRule = parseCampDiscount(c) || '';
     return c;
   });
   const orders = sheetToObjects(SH.ORDERS).map(o => {
@@ -564,6 +698,7 @@ function getAllData(user) {
     marketing,
     accounts,
     promoCodes,
+    archiveStats: getArchiveStats(),
   });
 }
 
@@ -585,6 +720,8 @@ function saveCampaign(body, user) {
   if (!c.closedStatus) c.closedStatus = '';
   if (!c.pickupDate) c.pickupDate = '';
   if (!c || !c.name) return err('團購名稱為必填');
+  const prodList = typeof c.products === 'string' ? (function(){ try { return JSON.parse(c.products || '[]'); } catch(e) { return []; } })() : (c.products || []);
+  if (!prodList.length) return err('團購至少需要 1 個品項');
   if (!c.id) c.id = 'C' + new Date().getTime();
   if (!c.createdAt) c.createdAt = ts();
   c.products = JSON.stringify(c.products || []);
@@ -593,9 +730,16 @@ function saveCampaign(body, user) {
     c.discountRule = JSON.stringify(c.discountRule);
   }
   if (!c.discountRule) c.discountRule = '';
-  const headers = ['id','name','supplierId','deadline','minPeople','discountRule','status','closedStatus','pickupDate','note','products','allowedCodes','createdAt'];
+  // menuImages：JSON 陣列字串，最多 6 張
+  if (Array.isArray(c.menuImages)) c.menuImages = JSON.stringify(c.menuImages.slice(0, 6));
+  if (c.menuImages === undefined || c.menuImages === null) c.menuImages = '';
+  const headers = ['id','name','supplierId','deadline','minPeople','discountRule','status','closedStatus','pickupDate','note','products','allowedCodes','createdAt','menuImages'];
   upsertRow(SH.CAMPAIGNS, headers, c, 'id');
-  return ok({ id: c.id });
+  // 已結束 → 訂單自動移到「訂單封存」；從已結束改回其他狀態 → 自動搬回
+  let archived = 0, restored = 0;
+  if (c.status === 'done') archived = archiveCampaignOrders(c.id);
+  else restored = restoreCampaignOrders(c.id);
+  return ok({ id: c.id, archived, restored });
 }
 
 function saveSupplier(body, user) {
@@ -605,7 +749,12 @@ function saveSupplier(body, user) {
   if (!s || !s.name) return err('廠商名稱為必填');
   if (!s.id) s.id = 'S' + new Date().getTime();
   if (!s.createdAt) s.createdAt = ts();
-  const headers = ['id','name','cat','contact','note','createdAt'];
+  if (s.costRate !== undefined && s.costRate !== '') {
+    const r = parseFloat(s.costRate);
+    if (isNaN(r) || r <= 0 || r > 100) return err('進貨折數請填 1~100（例如 86 代表 86 折）');
+    s.costRate = r;
+  }
+  const headers = ['id','name','cat','contact','note','createdAt','costRate'];
   upsertRow(SH.SUPPLIERS, headers, s, 'id');
   return ok({ id: s.id });
 }
@@ -615,6 +764,9 @@ function saveProduct(body, user) {
   let p = body.product;
   if (typeof p === 'string') try { p = JSON.parse(p); } catch(e) {}
   if (!p || !p.name) return err('商品名稱為必填');
+  const dupProd = sheetToObjects(SH.PRODUCTS).find(e =>
+    String(e.supplierId) === String(p.supplierId) && normName(e.name) === normName(p.name) && String(e.id) !== String(p.id || ''));
+  if (dupProd) return err('此廠商已有同名商品「' + dupProd.name + '」' + (String(dupProd.active) === 'false' ? '（目前停用中，可直接啟用）' : ''));
   if (!p.id) p.id = 'P' + new Date().getTime();
   const headers = ['id','supplierId','name','cat','spec','price','img','active'];
   upsertRow(SH.PRODUCTS, headers, p, 'id');
@@ -649,6 +801,17 @@ function importProducts(body, user) {
     }
   });
 
+  // 以「廠商＋商品名稱」（忽略空白、全半形、大小寫）判斷重複
+  const keyOf = (sid, name) => String(sid) + '::' + normName(name);
+  const seen = {};
+  const dupInBatch = [];
+  products.forEach(p => {
+    const k = keyOf(p.supplierId, p.name);
+    if (seen[k]) dupInBatch.push(p.supplierName ? p.supplierName + '／' + p.name : p.name);
+    seen[k] = true;
+  });
+  if (dupInBatch.length) return err('匯入資料內有重複的「廠商＋商品」：' + dupInBatch.join('、'));
+
   const headers = ['id','supplierId','name','cat','spec','price','img','active'];
   const sheet = ensureSheet(SH.PRODUCTS, headers);
 
@@ -663,9 +826,9 @@ function importProducts(body, user) {
   if (mode === 'replace_supplier') {
     // Deactivate products of affected suppliers not in this import
     const affectedSupIds = [...new Set(products.map(p => p.supplierId))];
-    const csvNames = new Set(products.map(p => p.supplierId + '::' + p.name));
+    const csvNames = new Set(products.map(p => keyOf(p.supplierId, p.name)));
     existing.forEach(p => {
-      if (affectedSupIds.includes(p.supplierId) && !csvNames.has(p.supplierId + '::' + p.name)) {
+      if (affectedSupIds.map(String).includes(String(p.supplierId)) && !csvNames.has(keyOf(p.supplierId, p.name))) {
         p.active = 'false';
         upsertRow(SH.PRODUCTS, headers, p, 'id');
         deactivated++;
@@ -673,12 +836,16 @@ function importProducts(body, user) {
     });
   }
 
+  const exMap = {};
+  existing.forEach(e => { const k = keyOf(e.supplierId, e.name); if (!exMap[k]) exMap[k] = e; });
   products.forEach(p => {
-    if (!p.id) p.id = 'P' + new Date().getTime() + Math.random().toString(36).slice(2,6);
-    const ex = existing.find(e => e.supplierId === p.supplierId && e.name === p.name);
-    if (ex) { p.id = ex.id; updated++; } else { added++; }
+    const ex = exMap[keyOf(p.supplierId, p.name)];
+    if (ex) { p.id = ex.id; updated++; }
+    else { p.id = 'P' + new Date().getTime() + Math.random().toString(36).slice(2,6); added++; }
     p.active = 'true';
-    upsertRow(SH.PRODUCTS, headers, p, 'id');
+    const rec = { id: p.id, supplierId: p.supplierId, name: String(p.name).trim(), cat: p.cat || '', spec: p.spec || '', price: p.price, img: p.img || (ex && ex.img) || '', active: 'true' };
+    upsertRow(SH.PRODUCTS, headers, rec, 'id');
+    exMap[keyOf(p.supplierId, p.name)] = rec;
   });
 
   return ok({ added, updated, deactivated });
@@ -724,19 +891,8 @@ function saveMarketing(body, user) {
 function updatePaid(body, user) {
   if (!['root','admin','helper'].includes(user.role)) return err('權限不足');
   const { orderId, paid } = body;
-  const sheet = ss().getSheetByName(SH.ORDERS);
-  if (!sheet) return err('找不到訂單工作表');
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const idCol = headers.indexOf('id');
-  const paidCol = headers.indexOf('paid');
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][idCol]) === String(orderId)) {
-      sheet.getRange(i + 1, paidCol + 1).setValue(String(paid));
-      return ok({});
-    }
-  }
-  return err('找不到訂單: ' + orderId);
+  const n = setPaidInSheets([String(orderId)], paid);
+  return n ? ok({}) : err('找不到訂單: ' + orderId);
 }
 
 function saveAccount(body, user) {
@@ -749,14 +905,14 @@ function saveAccount(body, user) {
   // New account
   if (!acc.id) {
     const existing = sheetToObjects(SH.ACCOUNTS);
-    if (existing.find(a => a.user === acc.user)) return err('帳號名稱已存在');
+    if (existing.find(a => String(a.user).toLowerCase() === String(acc.user).toLowerCase())) return err('帳號名稱已存在');
     if (!acc.pass) return err('新帳號需設定密碼');
     acc.id = 'A' + new Date().getTime();
     acc.passHash = hashPass(acc.pass);
     acc.createdAt = ts();
   } else {
     // Update — only change passHash if new pass provided
-    const existing = sheetToObjects(SH.ACCOUNTS).find(a => a.id === acc.id);
+    const existing = sheetToObjects(SH.ACCOUNTS).find(a => String(a.id) === String(acc.id));
     if (!existing) return err('找不到帳號');
     acc.passHash = acc.pass ? hashPass(acc.pass) : existing.passHash;
   }
@@ -768,6 +924,16 @@ function saveAccount(body, user) {
 function deleteRecord(body, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
   const { type, id } = body;
+  if (type === 'account') {
+    if (user.role !== 'root') return err('只有 ROOT 可以刪除帳號');
+    if (String(id) === String(user.id)) return err('不能刪除自己目前登入的帳號');
+    const accs = sheetToObjects(SH.ACCOUNTS);
+    const target = accs.find(a => String(a.id) === String(id));
+    if (!target) return err('找不到帳號');
+    if (target.role === 'root' && accs.filter(a => a.role === 'root').length <= 1) return err('至少需保留一個 ROOT 帳號');
+    deleteRow(SH.ACCOUNTS, 'id', id);
+    return ok({});
+  }
   const map = { supplier: SH.SUPPLIERS, product: SH.PRODUCTS, campaign: SH.CAMPAIGNS };
   if (!map[type]) return err('無效的類型');
   deleteRow(map[type], 'id', id);
@@ -861,7 +1027,12 @@ function getStock(campaignId) {
 function queryOrder(phone) {
   if (!phone || !/^09\d{8}$/.test(phone)) return err('請輸入正確的手機號碼');
 
-  const allOrders = sheetToObjects(SH.ORDERS).filter(o => o.phone === phone);
+  // 防呆：容忍舊資料開頭 0 被 Sheets 自動吃掉的情況（09xxxxxxxx vs 9xxxxxxxx）
+  const phoneNoZero = phone.replace(/^0/, '');
+  const allOrders = sheetToObjects(SH.ORDERS).concat(sheetToObjects(SH.ARCHIVE)).filter(o => {
+    const p = String(o.phone || '');
+    return p === phone || p === phoneNoZero || p.replace(/^0/, '') === phoneNoZero;
+  });
   if (!allOrders.length) return ok({ orders: [], message: '查無訂單' });
 
   const campaigns = sheetToObjects(SH.CAMPAIGNS);
@@ -980,18 +1151,19 @@ function validatePromoCode(code, campaignId) {
     rule = defaultRule || { campaignId: '*', discountType: 'none', discountValue: '{}' };
   }
 
-  // Check whitelist: campaign must have this code in allowedCodes
+  // Check whitelist: 白名單制，campaign 必須明確勾選此優惠碼才可用
+  // 空白名單 = 預設不允許（而非放行）
   if (campaignId) {
     const campaigns = sheetToObjects(SH.CAMPAIGNS);
     const camp = campaigns.find(c => String(c.id) === String(campaignId));
     if (camp) {
       let allowedCodes = [];
       try { allowedCodes = JSON.parse(camp.allowedCodes || '[]'); } catch(e) {}
-      if (allowedCodes.length > 0 && !allowedCodes.map(c=>c.toUpperCase()).includes(promo.code.toUpperCase())) {
-        // Not in whitelist → use default behavior (not allowed)
-        if (rule.discountType !== 'none') {
-          return err('此優惠碼不適用本次團購');
-        }
+      const isWhitelisted = allowedCodes.map(c=>String(c).toUpperCase()).includes(promo.code.toUpperCase());
+      // 優惠碼裡已為此團購設定「專屬規則」＝視同開放（避免只改優惠碼、忘了改團購白名單而失效）
+      const hasOwnRule = campaignRules.some(r => String(r.campaignId) === String(campaignId));
+      if (!isWhitelisted && !hasOwnRule) {
+        return err('此優惠碼不適用本次團購');
       }
     }
   }
@@ -1048,13 +1220,15 @@ function validatePromoCodeMulti(code, campaignIds) {
       rule = defaultRule || { campaignId: '*', discountType: 'none', discountValue: '{}' };
     }
 
-    // Check whitelist
+    // Check whitelist：空白名單 = 預設不允許
     const camp = campaigns.find(c => String(c.id) === String(campaignId));
     if (camp) {
       let allowedCodes = [];
       try { allowedCodes = JSON.parse(camp.allowedCodes || '[]'); } catch(e) {}
-      if (allowedCodes.length > 0 && !allowedCodes.map(c=>c.toUpperCase()).includes(promo.code.toUpperCase())) {
-        results[campaignId] = { discountType: 'none', discountValue: '{}', label: '此團購不適用' };
+      const isWhitelisted = allowedCodes.map(c=>String(c).toUpperCase()).includes(promo.code.toUpperCase());
+      const hasOwnRule = campaignRules.some(r => String(r.campaignId) === String(campaignId));
+      if (!isWhitelisted && !hasOwnRule) {
+        results[campaignId] = { discountType: 'none', discountValue: '{}', label: '此團購不適用', error: true };
         return;
       }
     }
@@ -1111,7 +1285,7 @@ function deletePromoCode(id, user) {
 // ════════════════════════════════════════════════════════════
 function getPromoStats(code, from, to, user) {
   if (!['root','admin'].includes(user.role)) return err('權限不足');
-  let orders = sheetToObjects(SH.ORDERS);
+  let orders = sheetToObjects(SH.ORDERS).concat(sheetToObjects(SH.ARCHIVE));
 
   // Filter by date range
   if (from) orders = orders.filter(o => o.ts && o.ts >= from);
@@ -1147,33 +1321,58 @@ function batchUpdatePaid(body, user) {
   const { orderIds, paid } = body;
   if (!orderIds || !orderIds.length) return err('請選擇訂單');
 
-  const sheet = ss().getSheetByName(SH.ORDERS);
-  if (!sheet) return err('找不到訂單工作表');
-
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const idCol = headers.indexOf('id');
-  const paidCol = headers.indexOf('paid');
-  if (idCol < 0 || paidCol < 0) return err('欄位結構錯誤');
-
-  let updated = 0;
-  const paidStr = String(paid);
-  const idSet = new Set(orderIds.map(String));
-
-  for (let i = 1; i < data.length; i++) {
-    if (idSet.has(String(data[i][idCol]))) {
-      sheet.getRange(i + 1, paidCol + 1).setValue(paidStr);
-      updated++;
-    }
-  }
-
+  const updated = setPaidInSheets(orderIds.map(String), paid);
   return ok({ updated });
 }
 
 // ════════════════════════════════════════════════════════════
 //  手動初始化（第一次部署後在 Apps Script 執行一次）
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+//  一次性修復：補回被 Sheets 自動吃掉的電話號碼開頭 0
+//  執行一次即可（Apps Script 函式選單選 fixPhoneNumbers → 執行）
+// ════════════════════════════════════════════════════════════
+function fixPhoneNumbers() {
+  const sheet = ss().getSheetByName(SH.ORDERS);
+  if (!sheet) { Logger.log('❌ 找不到訂單工作表'); return; }
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const phoneCol = headers.indexOf('phone');
+  if (phoneCol < 0) { Logger.log('❌ 找不到 phone 欄位'); return; }
+
+  // 先把整欄格式設為文字，避免修復後又被吃掉
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, phoneCol + 1, lastRow - 1, 1).setNumberFormat('@');
+  }
+
+  let fixed = 0;
+  for (let i = 1; i < data.length; i++) {
+    let phone = String(data[i][phoneCol] || '').trim();
+    if (!phone) continue;
+    // 9碼、開頭是9、不是0開頭 → 判定為漏掉開頭0
+    if (/^9\d{8}$/.test(phone)) {
+      const fixedPhone = '0' + phone;
+      sheet.getRange(i + 1, phoneCol + 1).setValue(fixedPhone);
+      fixed++;
+    }
+  }
+
+  Logger.log('✓ 修復完成，共修正 ' + fixed + ' 筆電話號碼');
+  Logger.log('→ 已將 phone 欄位格式設為文字，往後下單不會再被吃掉開頭0');
+}
+
+// 每次請求都檢查 8 張工作表很慢（每次多 1~2 秒）→ 6 小時內只檢查一次
+function initSheetsCached() {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('kc_init_ok')) return;
+  initSheets();
+  cache.put('kc_init_ok', '1', 21600);
+}
+
 function setup() {
+  CacheService.getScriptCache().remove('kc_init_ok');
   initSheets();
   Logger.log('✓ King\'s Corner Sheets 初始化完成');
   Logger.log('預設帳號: root / root1234');
@@ -1182,4 +1381,125 @@ function setup() {
   Logger.log('⚠️  還需要手動設定：');
   Logger.log('1. LINE_NOTIFY_TOKEN：填入 LINE Notify token 以接收新訂單通知');
   Logger.log('2. 自動關閉觸發條件：觸發條件 → 新增 → autoCloseCampaigns → 每天');
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  訂單封存：已結束團購的訂單移到「訂單封存」工作表
+//  ・主表只留進行中／已結單的訂單 → 後台載入快、畫面清爽
+//  ・封存資料完整保留（查詢訂單、優惠碼統計、客戶分析都會一起讀）
+// ════════════════════════════════════════════════════════════
+const ORDER_HEADERS = ['id','campaignId','campaignName','supplierId','name','phone','items','itemCount','total','discounted','promoCode','promoDiscount','shippingMethod','shippingFee','paymentMethod','address','paid','ts'];
+
+// 把 fromName 中符合 pred(rowObj) 的列搬到 toName，回傳搬移筆數
+function moveOrderRows(fromName, toName, pred, addArchivedAt) {
+  const from = ss().getSheetByName(fromName);
+  if (!from || from.getLastRow() < 2) return 0;
+  const data = from.getDataRange().getValues();
+  const h = data[0];
+  const picked = [];
+  for (let i = 1; i < data.length; i++) {
+    const o = {}; h.forEach((k, j) => { o[k] = data[i][j]; });
+    if (o[h[0]] === '' || o[h[0]] === null) continue;
+    if (pred(o)) picked.push({ i: i, o: o });
+  }
+  if (!picked.length) return 0;
+
+  const toHeaders = addArchivedAt ? ORDER_HEADERS.concat(['archivedAt']) : ORDER_HEADERS;
+  const to = ensureSheet(toName, toHeaders);
+  const th = to.getRange(1, 1, 1, to.getLastColumn()).getValues()[0];
+  const stamp = ts();
+  const rows = picked.map(p => th.map(k => {
+    if (k === 'archivedAt') return addArchivedAt ? stamp : '';
+    const v = p.o[k];
+    if (k === 'phone' && v !== '' && v !== null && v !== undefined) {
+      const ph = String(v); return /^9\d{8}$/.test(ph) ? '0' + ph : ph;
+    }
+    return v === undefined || v === null ? '' : v;
+  }));
+  const start = to.getLastRow() + 1;
+  const phoneIdx = th.indexOf('phone');
+  if (phoneIdx >= 0) to.getRange(start, phoneIdx + 1, rows.length, 1).setNumberFormat('@');
+  to.getRange(start, 1, rows.length, th.length).setValues(rows);
+
+  // 由下往上刪除，連續的列一次刪
+  const idxs = picked.map(p => p.i + 1).sort((a, b) => b - a);
+  let k = 0;
+  while (k < idxs.length) {
+    let end = idxs[k], beginRow = idxs[k];
+    while (k + 1 < idxs.length && idxs[k + 1] === beginRow - 1) { k++; beginRow = idxs[k]; }
+    from.deleteRows(beginRow, end - beginRow + 1);
+    k++;
+  }
+  return picked.length;
+}
+
+function archiveCampaignOrders(campaignId) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return 0;
+  try { return moveOrderRows(SH.ORDERS, SH.ARCHIVE, o => String(o.campaignId) === String(campaignId), true); }
+  finally { lock.releaseLock(); }
+}
+
+function restoreCampaignOrders(campaignId) {
+  const sh = ss().getSheetByName(SH.ARCHIVE);
+  if (!sh || sh.getLastRow() < 2) return 0;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return 0;
+  try { return moveOrderRows(SH.ARCHIVE, SH.ORDERS, o => String(o.campaignId) === String(campaignId), false); }
+  finally { lock.releaseLock(); }
+}
+
+// 一次整理：已結束團購的訂單 + 找不到團購的舊訂單 → 全部封存
+function archiveSweep(user) {
+  if (user && !['root','admin'].includes(user.role)) return err('權限不足');
+  const camps = sheetToObjects(SH.CAMPAIGNS);
+  const status = {}; camps.forEach(c => { status[String(c.id)] = c.status; });
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return err('系統忙碌中，請稍後再試');
+  try {
+    const n = moveOrderRows(SH.ORDERS, SH.ARCHIVE, o => {
+      const st = status[String(o.campaignId)];
+      return st === undefined || st === 'done';
+    }, true);
+    return ok({ archived: n });
+  } finally { lock.releaseLock(); }
+}
+
+function getArchive(user) {
+  const orders = sheetToObjects(SH.ARCHIVE).map(o => {
+    try { o.items = JSON.parse(o.items || '[]'); } catch(e) { o.items = []; }
+    o.paid = String(o.paid) === 'true';
+    o.archived = true;
+    return o;
+  });
+  return ok({ orders });
+}
+
+function getArchiveStats() {
+  const sh = ss().getSheetByName(SH.ARCHIVE);
+  if (!sh || sh.getLastRow() < 2) return { count: 0, total: 0 };
+  const h = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  const col = h.indexOf('discounted');
+  const n = sh.getLastRow() - 1;
+  let total = 0;
+  if (col >= 0) sh.getRange(2, col + 1, n, 1).getValues().forEach(r => { total += parseFloat(r[0]) || 0; });
+  return { count: n, total };
+}
+
+// 更新付款狀態（主表與封存表都找）
+function setPaidInSheets(ids, paid) {
+  const idSet = new Set(ids.map(String));
+  let updated = 0;
+  [SH.ORDERS, SH.ARCHIVE].forEach(name => {
+    const sheet = ss().getSheetByName(name);
+    if (!sheet || sheet.getLastRow() < 2) return;
+    const data = sheet.getDataRange().getValues();
+    const idCol = data[0].indexOf('id'), paidCol = data[0].indexOf('paid');
+    if (idCol < 0 || paidCol < 0) return;
+    for (let i = 1; i < data.length; i++) {
+      if (idSet.has(String(data[i][idCol]))) { sheet.getRange(i + 1, paidCol + 1).setValue(String(paid)); updated++; }
+    }
+  });
+  return updated;
 }

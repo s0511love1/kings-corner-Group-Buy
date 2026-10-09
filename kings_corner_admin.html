@@ -199,6 +199,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="nav-section">分析</div>
       <div class="nav-item" onclick="showPage('payment')"><span class="ni">💳</span>付款追蹤</div>
       <div class="nav-item" onclick="showPage('history')"><span class="ni">📁</span>歷史紀錄</div>
+      <div class="nav-item" onclick="showPage('customers')"><span class="ni">👥</span>客戶名單</div>
       <div class="nav-section">設定</div>
       <div class="nav-item" onclick="showPage('products')"><span class="ni">📦</span>商品庫</div>
       <div class="nav-item" onclick="showPage('suppliers')"><span class="ni">🏭</span>廠商管理</div>
@@ -242,7 +243,8 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <div class="table-wrap overflow-x" id="campaigns-table"></div>
     </div>
     <div class="page" id="page-orders">
-      <div class="topbar"><div class="page-title">訂單總覽</div><button class="btn btn-outline" onclick="exportXLSX()">⬇ 匯出 Excel</button></div>
+      <div class="topbar"><div class="page-title">訂單總覽</div><button class="btn btn-outline" onclick="exportOrdersPage()" id="orders-export-btn">⬇ 匯出 Excel</button></div>
+      <div style="font-size:12px;color:var(--faint);margin:-6px 0 12px">這裡只顯示進行中與已結單團購的訂單；團購設為「已結束」後，訂單會自動移到「歷史紀錄」。選定單一團購再按匯出，會產生該團購的叫貨單＋客戶對帳。</div>
       <!-- Batch action bar -->
       <div id="batch-bar" style="display:none;background:var(--dark3);border:1px solid var(--gold);border-radius:8px;padding:10px 16px;margin-bottom:12px;display:none;align-items:center;gap:10px;flex-wrap:wrap">
         <span id="batch-count" style="font-size:13px;color:var(--gold);font-weight:700">已選 0 筆</span>
@@ -296,6 +298,20 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <div class="table-wrap overflow-x" id="hist-orders-table"></div>
       </div>
       <div id="hist-stats" style="display:none"><div class="table-wrap overflow-x" id="hist-stats-table"></div></div>
+    </div>
+    <div class="page" id="page-customers">
+      <div class="topbar"><div class="page-title">客戶名單</div><button class="btn btn-outline" onclick="exportCustomersXLSX()">⬇ 匯出名單</button></div>
+      <div style="font-size:12px;color:var(--faint);margin:-6px 0 12px">以手機號碼彙整所有訂單（含已封存）。分群規則：🌟 VIP＝累計消費 ≥ $3,000 或參加 4 次以上；💤 沉睡＝超過 90 天沒下單；🔁 常客＝參加 2 次以上；🆕 新客＝只參加 1 次。點客戶可看完整購買紀錄。</div>
+      <div class="toolbar">
+        <div class="search-wrap"><input type="text" id="cust-search" placeholder="搜尋姓名/電話" oninput="renderCustomers()"></div>
+        <select id="cust-filter-seg" onchange="renderCustomers()"><option value="">所有分群</option><option value="vip">🌟 VIP</option><option value="regular">🔁 常客</option><option value="new">🆕 新客</option><option value="sleep">💤 沉睡</option></select>
+        <select id="cust-filter-supplier" onchange="renderCustomers()"><option value="">所有廠商</option></select>
+        <select id="cust-filter-cat" onchange="renderCustomers()"><option value="">所有分類</option></select>
+        <select id="cust-filter-source" onchange="renderCustomers()"><option value="">所有來源</option></select>
+        <select id="cust-sort" onchange="renderCustomers()"><option value="spend">依累計消費</option><option value="recent">依最近下單</option><option value="camps">依參加次數</option><option value="sleep">依沉睡天數</option><option value="unpaid">依未收款</option></select>
+      </div>
+      <div class="total-bar" id="cust-totals"></div>
+      <div class="table-wrap overflow-x" id="customers-table"></div>
     </div>
     <div class="page" id="page-products">
       <div class="topbar"><div class="page-title">商品庫</div>
@@ -575,7 +591,11 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <div class="ff" style="margin-bottom:0"><label>廠商名稱 *</label><input type="text" id="s-name" placeholder="例：初雞"></div>
         <div class="ff" style="margin-bottom:0"><label>分類</label><input type="text" id="s-cat" placeholder="例：肉品"></div>
       </div>
-      <div class="ff"><label>聯絡方式</label><input type="text" id="s-contact" placeholder="LINE / 電話"></div>
+      <div class="form-row" style="margin-bottom:14px">
+        <div class="ff" style="margin-bottom:0"><label>聯絡方式</label><input type="text" id="s-contact" placeholder="LINE / 電話"></div>
+        <div class="ff" style="margin-bottom:0"><label>進貨折數（選填）</label><input type="number" id="s-cost-rate" placeholder="例：86 ＝ 原價 86 折" min="1" max="100" step="0.5"></div>
+      </div>
+      <div style="font-size:11px;color:var(--faint);margin:-6px 0 12px">廠商給你的進貨折扣。匯出叫貨單時會自動算出「應付廠商」金額與商品毛利。</div>
       <div class="ff"><label>備註</label><textarea id="s-note" placeholder="廠商說明…"></textarea></div>
     </div>
     <div class="modal-foot">
@@ -801,12 +821,15 @@ async function loadData(){
       fakeNames:mkt.fakeNames?JSON.parse(mkt.fakeNames):[],
       campaignBoost:mkt.campaignBoost?JSON.parse(mkt.campaignBoost):{},
     };
+    archiveStats=data.archiveStats||{count:0,total:0};
+    archiveOrders=null; // 封存資料改為需要時重新載入
     renderAll();showToast('資料已更新 ✓');
+    setTimeout(()=>autoArchiveSweep().catch(()=>{}),300);
   }catch(e){showToast('連線錯誤：'+e.message,'error');console.error(e);}
   finally{loading(false);}
 }
 
-const PAGE_ORDER=['dashboard','campaigns','orders','payment','history','products','suppliers','ads','promo','marketing','accounts'];
+const PAGE_ORDER=['dashboard','campaigns','orders','payment','history','customers','products','suppliers','ads','promo','marketing','accounts'];
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -818,7 +841,8 @@ function showPage(id){
   if(id==='orders'){populateOrderFilters();renderOrders();}
   if(id==='campaigns'){renderCampaigns();}
   if(id==='payment'){populatePayFilters();renderPayment();}
-  if(id==='history'){populateHistFilters();renderHistCamps();}
+  if(id==='history'){populateHistFilters();renderHistCamps();ensureArchive().then(()=>{renderHistCamps();renderHistOrders();renderHistStats();}).catch(()=>{});}
+  if(id==='customers'){renderCustomersPage();}
   if(id==='products')renderProducts();
   if(id==='suppliers')renderSuppliers();
   if(id==='ads')renderAdsPage();
@@ -891,13 +915,14 @@ function renderDashboard(){
   const money=n=>'$'+Math.round(n).toLocaleString();
   const activeOrders=orders.filter(o=>activeIds.has(String(o.campaignId)));
   const activeAmt=activeOrders.reduce((s,o)=>s+amt(o),0);
-  const allAmt=orders.reduce((s,o)=>s+amt(o),0);
+  const allAmt=orders.reduce((s,o)=>s+amt(o),0)+(parseFloat(archiveStats.total)||0);
+  const allCnt=orders.length+(parseInt(archiveStats.count)||0);
   // 待收款：進行中＋已結單（未結束）的團購中，尚未付款的訂單；金額含運費
   const unpaidOrders=orders.filter(o=>!o.paid&&openIds.has(String(o.campaignId)));
   const unpaidAmt=unpaidOrders.reduce((s,o)=>s+amt(o)+(parseFloat(o.shippingFee)||0),0);
   document.getElementById('stats-grid').innerHTML=`
     <div class="stat-card"><div class="stat-label">進行中團購</div><div class="stat-val">${active.length}</div><div class="stat-sub">已結單 ${closed.length}・累計 ${campaigns.length} 次</div></div>
-    <div class="stat-card"><div class="stat-label">進行中訂單</div><div class="stat-val">${activeOrders.length}</div><div class="stat-sub">累計 ${orders.length} 筆</div></div>
+    <div class="stat-card"><div class="stat-label">進行中訂單</div><div class="stat-val">${activeOrders.length}</div><div class="stat-sub">累計 ${allCnt} 筆（含封存）</div></div>
     <div class="stat-card"><div class="stat-label">進行中金額</div><div class="stat-val" style="font-size:${activeAmt>=100000?'30px':''}">${money(activeAmt)}</div><div class="stat-sub">商品優惠後・累計 ${money(allAmt)}</div></div>
     <div class="stat-card"><div class="stat-label">待收款</div><div class="stat-val" style="color:#ff8080">${unpaidOrders.length}</div><div class="stat-sub">筆・${money(unpaidAmt)}（含運，不含已結束團購）</div></div>
     <div class="stat-card"><div class="stat-label">廠商數</div><div class="stat-val">${suppliers.length}</div><div class="stat-sub">合作中</div></div>`;
@@ -953,7 +978,8 @@ async function campBatchStatus(status){
       const data=await apiPost({action:'saveCampaign',campaign:{...c,status,products:c.products}});
       if(data.status==='ok'){c.status=status;updated++;}
     }
-    clearCampSelection();renderCampaigns();renderDashboard();
+    clearCampSelection();
+    await loadData(); // 設為已結束的團購，訂單會被移到封存，需重新載入
     showToast(`已將 ${updated} 個團購設為「${statusLabel}」✓`);
   }catch(e){showToast('更新失敗','error');}finally{loading(false);}
 }
@@ -975,7 +1001,7 @@ function campsTableHtml(list, showCheckbox=false){
   if(!list.length)return`<div class="empty"><div class="empty-icon">🛒</div><p>沒有符合的團購</p></div>`;
   return`<table style="table-layout:fixed;width:100%"><thead><tr>
     ${showCheckbox?`<th style="width:36px"><input type="checkbox" id="camp-select-all" onchange="toggleCampSelectAll(this)" style="cursor:pointer;width:16px;height:16px"></th>`:''}
-    <th style="width:180px">名稱</th><th style="width:90px">廠商</th><th style="width:110px">截止</th><th style="width:70px">訂單</th><th style="width:180px">品項庫存</th><th style="width:90px">狀態</th><th style="width:130px">操作</th>
+    <th style="width:170px">名稱</th><th style="width:80px">廠商</th><th style="width:110px">截止</th><th style="width:70px">訂單</th><th style="width:180px">品項庫存</th><th style="width:90px">狀態</th><th style="width:220px">操作</th>
   </tr></thead><tbody>`+
   list.map(c=>{
     const cnt=orders.filter(o=>String(o.campaignId)===String(c.id)).length;
@@ -1008,7 +1034,7 @@ function campsTableHtml(list, showCheckbox=false){
           <option value="arrived" ${c.closedStatus==='arrived'?'selected':''}>📦 已到貨</option>
         </select>`:''}
       </td>
-      <td style="${cellS}white-space:nowrap"><div style="display:flex;gap:6px;flex-wrap:nowrap"><button class="btn btn-outline btn-sm" onclick="editCampaign('${c.id}')">編輯</button><button class="btn btn-outline btn-sm" onclick="showCampLink('${c.id}')">連結</button></div></td>
+      <td style="${cellS}white-space:nowrap"><div style="display:flex;gap:6px;flex-wrap:nowrap"><button class="btn btn-outline btn-sm" onclick="editCampaign('${c.id}')">編輯</button><button class="btn btn-outline btn-sm" onclick="showCampLink('${c.id}')">連結</button><button class="btn btn-outline btn-sm" title="匯出叫貨單＋客戶對帳" onclick="exportCampaignXLSX('${c.id}')">📥 匯出</button></div></td>
     </tr>`;
   }).join('')+'</tbody></table>';
 }
@@ -1561,6 +1587,8 @@ function filterOrdersBySup(){
   const cur=el.value;el.innerHTML='<option value="">所有團購</option>'+list.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');if(cur)el.value=cur;renderOrders();
 }
 function renderOrders(){
+  const btn=document.getElementById('orders-export-btn');
+  if(btn)btn.textContent=document.getElementById('order-filter-campaign')?.value?'📥 匯出此團購叫貨單':'⬇ 匯出 Excel';
   const q=(document.getElementById('order-search')?.value||'').toLowerCase();
   const sid=document.getElementById('order-filter-supplier')?.value||'';
   const cid=document.getElementById('order-filter-campaign')?.value||'';
@@ -1577,8 +1605,13 @@ function renderOrders(){
   document.getElementById('order-totals').innerHTML=`<div class="tb-item"><div class="tb-label">筆數</div><div class="tb-val">${list.length}</div></div><div class="tb-item"><div class="tb-label">總金額</div><div class="tb-val">$${tot.toLocaleString()}</div></div><div class="tb-item"><div class="tb-label">已收</div><div class="tb-val" style="color:#5dca8a">$${paid.toLocaleString()}</div></div><div class="tb-item"><div class="tb-label">未收</div><div class="tb-val" style="color:#ff8080">$${(tot-paid).toLocaleString()}</div></div>`;
   document.getElementById('orders-table').innerHTML=ordersTableHtml(list,false);
 }
+function exportOrdersPage(){
+  const cid=document.getElementById('order-filter-campaign')?.value||'';
+  if(cid)return exportCampaignXLSX(cid);
+  exportXLSX();
+}
 function viewOrder(id){
-  const o=orders.find(x=>String(x.id)===String(id));if(!o)return;
+  const o=allOrders().find(x=>String(x.id)===String(id));if(!o)return;
   const items=Array.isArray(o.items)?o.items:[];
   const camp=campaigns.find(x=>String(x.id)===String(o.campaignId));
   const soldMap=camp?calcSoldMap(camp.id):{};
@@ -1609,12 +1642,13 @@ function viewOrder(id){
   document.getElementById('modal-order').classList.add('show');
 }
 async function togglePaid(id){
-  const o=orders.find(x=>String(x.id)===String(id));if(!o)return;
+  const o=allOrders().find(x=>String(x.id)===String(id));if(!o)return;
   const newPaid=!o.paid;loading(true,'更新中…');
   try{
     const data=await apiPost({action:'updatePaid',orderId:id,paid:newPaid});
     if(data.status!=='ok'){showToast(data.message||'更新失敗','error');return;}
     o.paid=newPaid;closeModal('modal-order');renderOrders();renderPayment();renderDashboard();
+    if(document.getElementById('page-history')?.classList.contains('active'))renderHistOrders();
     showToast(newPaid?'已標記付款 ✓':'已取消付款標記');
   }catch(e){showToast('更新失敗','error');}finally{loading(false);}
 }
@@ -1716,7 +1750,7 @@ function histCampsTableHtml(list){
   if(!list.length)return`<div class="empty"><div class="empty-icon">📁</div><p>沒有符合的歷史團購</p></div>`;
   return`<table><thead><tr><th>名稱</th><th>廠商</th><th>截止</th><th>訂單</th><th>狀態</th><th>操作</th></tr></thead><tbody>`+
   list.map(c=>{
-    const cnt=orders.filter(o=>String(o.campaignId)===String(c.id)).length;
+    const cnt=allOrders().filter(o=>String(o.campaignId)===String(c.id)).length;
     return`<tr>
       <td style="font-weight:700">${c.name}</td>
       <td><span class="badge badge-cat">${supName(c.supplierId)}</span></td>
@@ -1725,6 +1759,7 @@ function histCampsTableHtml(list){
       <td>${statusBadge(c.status)}</td>
       <td style="display:flex;gap:6px">
         <button class="btn btn-outline btn-sm" onclick="editCampaign('${c.id}')">編輯</button>
+        <button class="btn btn-outline btn-sm" onclick="exportCampaignXLSX('${c.id}')">📥 匯出</button>
         <button class="btn btn-gold btn-sm" onclick="reopenCampaign('${c.id}')">🔄 再次開團</button>
       </td>
     </tr>`;
@@ -1789,11 +1824,12 @@ function renderHistOrders(){
   const cid=document.getElementById('hist-order-campaign')?.value||'';
   const closedIds=campaigns.filter(c=>c.status==='done').map(c=>String(c.id));
   const campIds=sid?campaigns.filter(c=>c.status==='done'&&String(c.supplierId)===String(sid)).map(c=>String(c.id)):closedIds;
-  const list=orders.filter(o=>campIds.includes(String(o.campaignId))&&(!cid||String(o.campaignId)===String(cid))&&(!q||o.name?.toLowerCase().includes(q)||o.phone?.includes(q)));
-  document.getElementById('hist-orders-table').innerHTML=ordersTableHtml(list,true);
+  const known=new Set(campaigns.map(c=>String(c.id)));
+  const list=allOrders().filter(o=>(campIds.includes(String(o.campaignId))||(!sid&&!cid&&!known.has(String(o.campaignId))))&&(!cid||String(o.campaignId)===String(cid))&&(!q||o.name?.toLowerCase().includes(q)||String(o.phone||'').includes(q)));
+  document.getElementById('hist-orders-table').innerHTML=(archiveOrders?'':'<div style="font-size:12px;color:var(--faint);margin-bottom:8px">載入封存訂單中…</div>')+ordersTableHtml(list,true);
 }
 function renderHistStats(){
-  const rows=suppliers.map(s=>{const sc=campaigns.filter(c=>String(c.supplierId)===String(s.id));const so=orders.filter(o=>sc.some(c=>String(c.id)===String(o.campaignId)));const tot=so.reduce((s,o)=>s+(parseFloat(o.discounted)||0),0);const paid=so.filter(o=>o.paid).reduce((s,o)=>s+(parseFloat(o.discounted)||0),0);return{name:s.name,cat:s.cat,camps:sc.length,orders:so.length,total:tot,paid};});
+  const rows=suppliers.map(s=>{const sc=campaigns.filter(c=>String(c.supplierId)===String(s.id));const so=allOrders().filter(o=>sc.some(c=>String(c.id)===String(o.campaignId)));const tot=so.reduce((s,o)=>s+(parseFloat(o.discounted)||0),0);const paid=so.filter(o=>o.paid).reduce((s,o)=>s+(parseFloat(o.discounted)||0),0);return{name:s.name,cat:s.cat,camps:sc.length,orders:so.length,total:tot,paid};});
   document.getElementById('hist-stats-table').innerHTML=`<table><thead><tr><th>廠商</th><th>分類</th><th>團購次數</th><th>訂單數</th><th>總金額</th><th>已收款</th><th>收款率</th></tr></thead><tbody>`+rows.map(r=>`<tr><td style="font-weight:700">${r.name}</td><td><span class="badge badge-cat">${r.cat}</span></td><td><span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--gold)">${r.camps}</span></td><td>${r.orders}</td><td>$${r.total.toLocaleString()}</td><td style="color:#5dca8a">$${r.paid.toLocaleString()}</td><td>${r.total?Math.round(r.paid/r.total*100):0}%</td></tr>`).join('')+'</tbody></table>';
 }
 
@@ -2080,10 +2116,10 @@ async function confirmImport(){
 function downloadCsvTemplate(){const csv='廠商名稱,分類,商品名稱,規格,建議單價,圖片網址\n初雞,雞胸肉,鹽味雞胸,180g ±5%,70,\n初雞,雞腿排,蔥鹽雞腿排,160g ±5%,85,\n逢國食品,餅乾,CROWN 原味營養餅200g,200g,69,\n';const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));a.download='kings_corner_商品範本.csv';a.click();}
 
 let editSupplierId=null;
-function renderSuppliers(){document.getElementById('suppliers-table').innerHTML=suppliers.length?`<table><thead><tr><th>廠商</th><th>分類</th><th>聯絡</th><th>備註</th><th>團購次數</th><th></th></tr></thead><tbody>`+suppliers.map(s=>{const cnt=campaigns.filter(c=>String(c.supplierId)===String(s.id)).length;return`<tr><td style="font-weight:700">${s.name}</td><td><span class="badge badge-cat">${s.cat}</span></td><td style="font-size:12px;color:var(--muted)">${s.contact||'—'}</td><td style="font-size:12px;color:var(--muted)">${s.note||'—'}</td><td><span style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--gold)">${cnt}</span></td><td><button class="btn btn-outline btn-sm" onclick="editSupplier('${s.id}')">編輯</button></td></tr>`;}).join('')+'</tbody></table>':`<div class="empty"><div class="empty-icon">🏭</div><p>尚無廠商</p></div>`;}
-function openNewSupplier(){editSupplierId=null;document.getElementById('ms-title').textContent='新增廠商';['s-name','s-cat','s-contact','s-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('modal-supplier').classList.add('show');}
-function editSupplier(id){const s=suppliers.find(x=>String(x.id)===String(id));if(!s)return;editSupplierId=id;document.getElementById('ms-title').textContent='編輯廠商';document.getElementById('s-name').value=s.name;document.getElementById('s-cat').value=s.cat||'';document.getElementById('s-contact').value=s.contact||'';document.getElementById('s-note').value=s.note||'';document.getElementById('modal-supplier').classList.add('show');}
-async function saveSupplier(){const name=document.getElementById('s-name').value.trim();if(!name){showToast('請輸入廠商名稱','error');return;}const supplier={id:editSupplierId||'',name,cat:document.getElementById('s-cat').value.trim(),contact:document.getElementById('s-contact').value.trim(),note:document.getElementById('s-note').value.trim()};loading(true,'儲存中…');try{const data=await apiPost({action:'saveSupplier',supplier});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-supplier');await loadData();showToast('廠商已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
+function renderSuppliers(){document.getElementById('suppliers-table').innerHTML=suppliers.length?`<table><thead><tr><th>廠商</th><th>分類</th><th>進貨折數</th><th>聯絡</th><th>備註</th><th>團購次數</th><th></th></tr></thead><tbody>`+suppliers.map(s=>{const cnt=campaigns.filter(c=>String(c.supplierId)===String(s.id)).length;return`<tr><td style="font-weight:700">${s.name}</td><td><span class="badge badge-cat">${s.cat}</span></td><td>${s.costRate?s.costRate+' 折':'<span style="color:var(--faint)">未設定</span>'}</td><td style="font-size:12px;color:var(--muted)">${s.contact||'—'}</td><td style="font-size:12px;color:var(--muted)">${s.note||'—'}</td><td><span style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--gold)">${cnt}</span></td><td><button class="btn btn-outline btn-sm" onclick="editSupplier('${s.id}')">編輯</button></td></tr>`;}).join('')+'</tbody></table>':`<div class="empty"><div class="empty-icon">🏭</div><p>尚無廠商</p></div>`;}
+function openNewSupplier(){editSupplierId=null;document.getElementById('ms-title').textContent='新增廠商';['s-name','s-cat','s-contact','s-note','s-cost-rate'].forEach(id=>document.getElementById(id).value='');document.getElementById('modal-supplier').classList.add('show');}
+function editSupplier(id){const s=suppliers.find(x=>String(x.id)===String(id));if(!s)return;editSupplierId=id;document.getElementById('ms-title').textContent='編輯廠商';document.getElementById('s-name').value=s.name;document.getElementById('s-cat').value=s.cat||'';document.getElementById('s-contact').value=s.contact||'';document.getElementById('s-note').value=s.note||'';document.getElementById('s-cost-rate').value=s.costRate||'';document.getElementById('modal-supplier').classList.add('show');}
+async function saveSupplier(){const name=document.getElementById('s-name').value.trim();if(!name){showToast('請輸入廠商名稱','error');return;}const supplier={id:editSupplierId||'',name,cat:document.getElementById('s-cat').value.trim(),contact:document.getElementById('s-contact').value.trim(),note:document.getElementById('s-note').value.trim(),costRate:document.getElementById('s-cost-rate').value.trim()};loading(true,'儲存中…');try{const data=await apiPost({action:'saveSupplier',supplier});if(data.status!=='ok'){showToast(data.message,'error');return;}closeModal('modal-supplier');await loadData();showToast('廠商已儲存 ✓');}catch(e){showToast('儲存失敗','error');}finally{loading(false);}
 }
 
 // ── PROMO CODES ──
@@ -2433,6 +2469,420 @@ document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>
   // Don't close campaign wizard on outside click (prevents accidental data loss)
   if(e.target===m&&m.id!=='modal-campaign')m.classList.remove('show');
 }));
+
+// ════════════════════════════════════════════════════════════
+//  KCX：輕量 Excel (.xlsx) 產生器（不需外部套件）
+//  支援：多工作表、文字/數字/公式、粗體/顏色/底色/框線/對齊/換行、
+//        合併儲存格、欄寬列高、凍結窗格、A4 橫印一頁寬
+// ════════════════════════════════════════════════════════════
+const KCX=(()=>{
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'');
+  const colName=n=>{let s='';n++;while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26);}return s;}; // 0-based
+  const ref=(r,c)=>colName(c)+(r+1);
+  function Workbook(){
+    const sheets=[];const styleKeys=[];const styleMap={};
+    function styleId(st){
+      if(!st)return 0;
+      const k=JSON.stringify(st);
+      if(styleMap[k]===undefined){styleMap[k]=styleKeys.length+1;styleKeys.push(st);}
+      return styleMap[k];
+    }
+    function addSheet(name){
+      const sh={name:String(name).replace(/[\\\/\?\*\[\]:]/g,' ').slice(0,31),cells:{},merges:[],cols:{},rows:{},freeze:null,landscape:false,
+        set(r,c,v,st){this.cells[r+','+c]={v,s:styleId(st)};return this;},
+        style(r,c,st){const k=r+','+c;if(!this.cells[k])this.cells[k]={v:null,s:0};this.cells[k].s=styleId(st);return this;},
+        merge(r1,c1,r2,c2){if(r2>r1||c2>c1)this.merges.push(ref(r1,c1)+':'+ref(r2,c2));return this;},
+        width(c,w){this.cols[c]=w;return this;},height(r,h){this.rows[r]=h;return this;}};
+      sheets.push(sh);return sh;
+    }
+    function sheetXml(sh){
+      const byRow={};let maxR=0,maxC=0;
+      Object.entries(sh.cells).forEach(([k,cell])=>{const [r,c]=k.split(',').map(Number);(byRow[r]=byRow[r]||[]).push([c,cell]);maxR=Math.max(maxR,r);maxC=Math.max(maxC,c);});
+      let x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
+      if(sh.landscape)x+='<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>';
+      x+=`<dimension ref="A1:${ref(maxR,maxC)}"/>`;
+      x+='<sheetViews><sheetView workbookViewId="0">';
+      if(sh.freeze){const {r,c}=sh.freeze;x+=`<pane${c?` xSplit="${c}"`:''}${r?` ySplit="${r}"`:''} topLeftCell="${ref(r,c)}" activePane="${r&&c?'bottomRight':r?'bottomLeft':'topRight'}" state="frozen"/>`;}
+      x+='</sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/>';
+      const cks=Object.keys(sh.cols).map(Number).sort((a,b)=>a-b);
+      if(cks.length)x+='<cols>'+cks.map(c=>`<col min="${c+1}" max="${c+1}" width="${sh.cols[c]}" customWidth="1"/>`).join('')+'</cols>';
+      x+='<sheetData>';
+      const rks=[...new Set([...Object.keys(byRow),...Object.keys(sh.rows)].map(Number))].sort((a,b)=>a-b);
+      rks.forEach(r=>{
+        const h=sh.rows[r];x+=`<row r="${r+1}"${h?` ht="${h}" customHeight="1"`:''}>`;
+        (byRow[r]||[]).sort((a,b)=>a[0]-b[0]).forEach(([c,cell])=>{
+          const a=ref(r,c),s=cell.s?` s="${cell.s}"`:'',v=cell.v;
+          if(v===null||v===undefined||v==='')x+=`<c r="${a}"${s}/>`;
+          else if(typeof v==='object'&&v.f!==undefined){
+            // r：預先算好的結果（讓手機預覽、LINE 預覽等不會重算公式的檢視器也看得到數字）
+            if(typeof v.r==='number'&&isFinite(v.r))x+=`<c r="${a}"${s}><f>${esc(v.f)}</f><v>${v.r}</v></c>`;
+            else if(typeof v.r==='string')x+=`<c r="${a}"${s} t="str"><f>${esc(v.f)}</f><v>${esc(v.r)}</v></c>`;
+            else x+=`<c r="${a}"${s}><f>${esc(v.f)}</f></c>`;
+          }
+          else if(typeof v==='number'&&isFinite(v))x+=`<c r="${a}"${s}><v>${v}</v></c>`;
+          else x+=`<c r="${a}"${s} t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+        });
+        x+='</row>';
+      });
+      x+='</sheetData>';
+      if(sh.merges.length)x+=`<mergeCells count="${sh.merges.length}">`+sh.merges.map(m=>`<mergeCell ref="${m}"/>`).join('')+'</mergeCells>';
+      x+='<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>';
+      if(sh.landscape)x+='<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>';
+      return x+'</worksheet>';
+    }
+    function stylesXml(){
+      const fonts=['<font><sz val="11"/><name val="Calibri"/></font>'],fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'],
+        borders=['<border><left/><right/><top/><bottom/><diagonal/></border>'],numFmts=[],xfs=['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'];
+      const idx=(arr,xml)=>{let i=arr.indexOf(xml);if(i<0){arr.push(xml);i=arr.length-1;}return i;};
+      styleKeys.forEach(st=>{
+        const font=`<font>${st.bold?'<b/>':''}${st.italic?'<i/>':''}<sz val="${st.size||11}"/>${st.color?`<color rgb="FF${st.color.replace('#','')}"/>`:''}<name val="Calibri"/></font>`;
+        const fill=st.fill?`<fill><patternFill patternType="solid"><fgColor rgb="FF${st.fill.replace('#','')}"/><bgColor indexed="64"/></patternFill></fill>`:null;
+        const bc=(st.borderColor||'BFBFBF').replace('#','');
+        const side=t=>`<${t} style="thin"><color rgb="FF${bc}"/></${t}>`;
+        const border=st.border?`<border>${side('left')}${side('right')}${side('top')}${side('bottom')}<diagonal/></border>`:(st.borderTop?`<border><left/><right/><top style="medium"><color rgb="FF${bc}"/></top><bottom/><diagonal/></border>`:null);
+        let nf=0;if(st.numFmt){let i=numFmts.indexOf(st.numFmt);if(i<0){numFmts.push(st.numFmt);i=numFmts.length-1;}nf=164+i;}
+        const fi=idx(fonts,font),fl=fill?idx(fills,fill):0,bo=border?idx(borders,border):0;
+        const al=(st.align||st.valign||st.wrap)?`<alignment${st.align?` horizontal="${st.align}"`:''} vertical="${st.valign||'center'}"${st.wrap?' wrapText="1"':''}/>`:'';
+        xfs.push(`<xf numFmtId="${nf}" fontId="${fi}" fillId="${fl}" borderId="${bo}" xfId="0"${nf?' applyNumberFormat="1"':''} applyFont="1"${fl?' applyFill="1"':''}${bo?' applyBorder="1"':''}${al?' applyAlignment="1">'+al+'</xf>':'/>'}`);
+      });
+      return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+        (numFmts.length?`<numFmts count="${numFmts.length}">`+numFmts.map((f,i)=>`<numFmt numFmtId="${164+i}" formatCode="${esc(f)}"/>`).join('')+'</numFmts>':'')+
+        `<fonts count="${fonts.length}">${fonts.join('')}</fonts><fills count="${fills.length}">${fills.join('')}</fills><borders count="${borders.length}">${borders.join('')}</borders>`+
+        '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+        `<cellXfs count="${xfs.length}">${xfs.join('')}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+    }
+    function build(){
+      const files=[];
+      files.push(['[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+sheets.map((s,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')+'</Types>']);
+      files.push(['_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>']);
+      files.push(['xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+sheets.map((s,i)=>`<sheet name="${esc(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')+'</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>']);
+      files.push(['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+sheets.map((s,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')+`<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`]);
+      sheets.forEach((s,i)=>files.push([`xl/worksheets/sheet${i+1}.xml`,sheetXml(s)]));
+      files.push(['xl/styles.xml',stylesXml()]);
+      return zip(files);
+    }
+    return {addSheet,build};
+  }
+  // ── 最小 ZIP（store，不壓縮）──
+  const CRC=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+  const crc32=b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRC[(c^b[i])&0xFF]^(c>>>8);return(c^0xFFFFFFFF)>>>0;};
+  function zip(files){
+    const enc=new TextEncoder();const parts=[];const central=[];let offset=0;
+    files.forEach(([name,content])=>{
+      const nb=enc.encode(name),data=enc.encode(content),crc=crc32(data);
+      const h=new DataView(new ArrayBuffer(30));
+      h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x0800,true);h.setUint16(8,0,true);h.setUint16(10,0,true);h.setUint16(12,0x21,true);
+      h.setUint32(14,crc,true);h.setUint32(18,data.length,true);h.setUint32(22,data.length,true);h.setUint16(26,nb.length,true);h.setUint16(28,0,true);
+      parts.push(new Uint8Array(h.buffer),nb,data);
+      const cd=new DataView(new ArrayBuffer(46));
+      cd.setUint32(0,0x02014b50,true);cd.setUint16(4,20,true);cd.setUint16(6,20,true);cd.setUint16(8,0x0800,true);cd.setUint16(10,0,true);cd.setUint16(12,0,true);cd.setUint16(14,0x21,true);
+      cd.setUint32(16,crc,true);cd.setUint32(20,data.length,true);cd.setUint32(24,data.length,true);cd.setUint16(28,nb.length,true);cd.setUint32(42,offset,true);
+      central.push(new Uint8Array(cd.buffer),nb);
+      offset+=30+nb.length+data.length;
+    });
+    const cdSize=central.reduce((s,a)=>s+a.length,0);
+    const end=new DataView(new ArrayBuffer(22));
+    end.setUint32(0,0x06054b50,true);end.setUint16(8,files.length,true);end.setUint16(10,files.length,true);end.setUint32(12,cdSize,true);end.setUint32(16,offset,true);
+    return new Blob([...parts,...central,new Uint8Array(end.buffer)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  }
+  function download(blob,filename){
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+    window.__kcLastExport={blob,filename};
+  }
+  return {Workbook,download,colName,ref};
+})();
+
+// ════════════════════════════════════════════════════════════
+//  單一團購匯出：叫貨總表（給廠商）＋ 客戶對帳（內部用）
+// ════════════════════════════════════════════════════════════
+const KC_CAT_PALETTE=[
+  {hd:'1F3A5F',lt:'DCE6F1'}, // 深藍
+  {hd:'1F6F6B',lt:'D9EEEC'}, // 墨綠
+  {hd:'7A2E3A',lt:'F2DEE1'}, // 酒紅
+  {hd:'5B6B2E',lt:'E8EDD9'}, // 橄欖
+  {hd:'4B4A7A',lt:'E3E2F0'}, // 灰紫
+  {hd:'7A5A2E',lt:'F1E7D8'}, // 咖啡
+  {hd:'3F4A54',lt:'E2E6EA'}, // 石墨
+  {hd:'2E6B8A',lt:'DAEAF2'}, // 湖藍
+];
+function kcOrderPhone(p){p=String(p||'');return /^9\d{8}$/.test(p)?'0'+p:p;}
+function kcProdCat(name,supplierId,fallback){
+  if(fallback)return fallback;
+  const lib=products.find(p=>String(p.supplierId)===String(supplierId)&&normName(p.name)===normName(name))||products.find(p=>normName(p.name)===normName(name));
+  return lib?.cat||'其他';
+}
+async function exportCampaignXLSX(campaignId){
+  const c=campaigns.find(x=>String(x.id)===String(campaignId));
+  if(!c){showToast('找不到團購','error');return;}
+  if(c.status==='done')await ensureArchive();
+  const list=allOrders().filter(o=>String(o.campaignId)===String(c.id)).sort((a,b)=>String(a.ts||a.id).localeCompare(String(b.ts||b.id)));
+  if(!list.length){showToast('此團購還沒有訂單','error');return;}
+  const sup=suppliers.find(s=>String(s.id)===String(c.supplierId))||{};
+  const costRate=parseFloat(sup.costRate)||0;
+
+  // ── 品項欄位：依團購商品順序，分類依首次出現排序；訂單裡有、但團購已移除的品項放最後 ──
+  const cols=[];const seen=new Set();
+  (c.products||[]).forEach(p=>{const k=normName(p.name);if(seen.has(k))return;seen.add(k);cols.push({name:p.name,price:parseFloat(p.price)||0,cat:kcProdCat(p.name,c.supplierId,p.cat),id:p.id});});
+  list.forEach(o=>(o.items||[]).forEach(i=>{const k=normName(i.name);if(seen.has(k))return;seen.add(k);cols.push({name:i.name,price:parseFloat(i.price)||0,cat:kcProdCat(i.name,c.supplierId),id:i.id});}));
+  const catOrder=[];cols.forEach(p=>{if(!catOrder.includes(p.cat))catOrder.push(p.cat);});
+  const catIdx=Object.fromEntries(catOrder.map((ct,i)=>[ct,i]));
+  cols.sort((a,b)=>catIdx[a.cat]-catIdx[b.cat]);
+  // 只保留至少有人買的品項（避免一長排空欄）；全部沒人買則保留全部
+  const qtyOf=(o,col)=>(o.items||[]).filter(i=>String(i.id)===String(col.id)||normName(i.name)===normName(col.name)).reduce((s,i)=>s+(parseInt(i.qty)||0),0);
+  const used=cols.filter(col=>list.some(o=>qtyOf(o,col)>0));
+  const P=used.length?used:cols;
+  const cats=[];P.forEach(p=>{if(!cats.includes(p.cat))cats.push(p.cat);});
+
+  const wb=KCX.Workbook();
+  const B={border:true,align:'center',valign:'center',wrap:true};
+  const money={...B,numFmt:'#,##0'};
+  // ═══ Sheet 1：叫貨總表 ═══
+  const s=wb.addSheet('叫貨總表');s.landscape=true;
+  const C0=1,cQ=C0+P.length,cA=cQ+1,R0=4;
+  s.set(0,0,`${c.name}`,{bold:true,size:15,color:'1F2933'});s.merge(0,0,0,Math.max(cA,4));
+  s.set(1,0,`廠商：${sup.name||'—'}　截止：${c.deadline||'—'}　訂購人數：${list.length} 人　匯出：${new Date().toLocaleDateString('zh-TW')}`,{color:'5F6B76',size:10});s.merge(1,0,1,Math.max(cA,4));
+  const hdS={...B,bold:true,fill:'3F4A54',color:'FFFFFF',borderColor:'3F4A54'};
+  s.set(2,0,'分類',hdS);s.set(3,0,'品項',hdS);s.set(R0,0,'姓名 ＼ 單價',hdS);
+  P.forEach((p,i)=>{
+    const pal=KC_CAT_PALETTE[cats.indexOf(p.cat)%KC_CAT_PALETTE.length];
+    s.set(2,C0+i,i===0||P[i-1].cat!==p.cat?p.cat:'',{...B,bold:true,fill:pal.hd,color:'FFFFFF',borderColor:pal.hd});
+    s.set(3,C0+i,p.name,{...B,bold:true,fill:pal.lt,color:'1F2933',size:10});
+    s.set(R0,C0+i,p.price,{...money,fill:pal.lt,color:'1F2933'});
+  });
+  cats.forEach(ct=>{const a=P.findIndex(p=>p.cat===ct),b=P.length-1-[...P].reverse().findIndex(p=>p.cat===ct);s.merge(2,C0+a,2,C0+b);});
+  [[cQ,'數量'],[cA,'金額']].forEach(([col,t])=>{s.set(2,col,t,hdS);s.set(3,col,'',hdS);s.set(R0,col,'',hdS);s.merge(2,col,R0,col);});
+  const L=c=>KCX.colName(c);
+  const colTot=P.map(()=>0);let qTot=0,aTot=0;
+  list.forEach((o,k)=>{
+    const r=R0+1+k;const zebra=k%2?{fill:'F7F8FA'}:{};
+    s.set(r,0,o.name||'',{...B,...zebra,align:'left'});
+    let rq=0,ra=0;
+    P.forEach((p,i)=>{const q=qtyOf(o,p);rq+=q;ra+=q*p.price;colTot[i]+=q;s.set(r,C0+i,q||'',{...B,...zebra});});
+    qTot+=rq;aTot+=ra;
+    s.set(r,cQ,{f:`SUM(${L(C0)}${r+1}:${L(cQ-1)}${r+1})`,r:rq},{...B,...zebra,bold:true});
+    s.set(r,cA,{f:`SUMPRODUCT(${L(C0)}${r+1}:${L(cQ-1)}${r+1},${L(C0)}$${R0+1}:${L(cQ-1)}$${R0+1})`,r:ra},{...money,...zebra,bold:true});
+  });
+  const rT=R0+1+list.length;
+  const totS={...B,bold:true,fill:'E2E6EA',color:'1F2933'};
+  s.set(rT,0,'品項合計',totS);
+  for(let col=C0;col<=cA;col++)s.set(rT,col,{f:`SUM(${L(col)}${R0+2}:${L(col)}${rT})`,r:col===cA?aTot:col===cQ?qTot:colTot[col-C0]},col===cA?{...totS,numFmt:'#,##0'}:totS);
+  const payable=costRate?Math.round(aTot*costRate/100):0;
+  const lab={bold:true,align:'right',color:'1F2933'},val={bold:true,numFmt:'#,##0',align:'right',color:'1F2933'};
+  const lc=Math.max(cA-2,0);
+  s.set(rT+2,lc,'原價總計',lab);s.merge(rT+2,lc,rT+2,cA-1);s.set(rT+2,cA,{f:`${L(cA)}${rT+1}`,r:aTot},val);
+  if(costRate){
+    s.set(rT+3,lc,`廠商進貨 ${costRate} 折`,lab);s.merge(rT+3,lc,rT+3,cA-1);
+    s.set(rT+3,cA,{f:`ROUND(${L(cA)}${rT+1}*${costRate/100},0)`,r:payable},{...val,fill:'FFF4D6',border:true});
+  }else{
+    s.set(rT+3,lc,'（廠商未設定進貨折數，請到「廠商管理」設定）',{color:'9AA3AD',italic:true,align:'right'});s.merge(rT+3,lc,rT+3,cA);
+  }
+  s.width(0,14);P.forEach((p,i)=>s.width(C0+i,Math.max(8,Math.min(14,String(p.name).length*1.7))));s.width(cQ,8);s.width(cA,11);
+  s.height(3,Math.min(80,18*Math.ceil(Math.max(...P.map(p=>String(p.name).length))/6)+8));s.height(0,26);
+  s.freeze={r:R0+1,c:1};
+
+  // ═══ Sheet 2：客戶對帳（內部用）═══
+  const t=wb.addSheet('客戶對帳');t.landscape=true;
+  t.set(0,0,`${c.name}｜客戶對帳（內部用，請勿傳給廠商）`,{bold:true,size:14,color:'1F2933'});t.merge(0,0,0,10);
+  const H=['姓名','手機','取貨方式','地址','付款方式','品項明細','數量','原價','團購折扣','優惠碼','優惠碼折扣','商品實收','運費','應收合計','付款','下單時間'];
+  H.forEach((h,i)=>t.set(1,i,h,hdS));
+  const S={qty:0,tot:0,camp:0,pd:0,disc:0,fee:0,due:0,paidDue:0,unpaidDue:0,unpaidN:0};
+  list.forEach((o,k)=>{
+    const r=2+k;const zebra=k%2?{fill:'F7F8FA'}:{};
+    const tot=parseFloat(o.total)||0,disc=parseFloat(o.discounted)||0,pd=parseFloat(o.promoDiscount)||0,fee=parseFloat(o.shippingFee)||0;
+    const campDisc=Math.max(0,tot-disc-pd);
+    const row=[o.name||'',kcOrderPhone(o.phone),o.shippingMethod||'自取',o.address||'',o.paymentMethod||'',
+      (o.items||[]).map(i=>`${i.name}×${i.qty}`).join('、'),(o.items||[]).reduce((s,i)=>s+(parseInt(i.qty)||0),0),
+      tot,campDisc||'',(o.promoCode&&o.promoCode!=='自然流量')?o.promoCode:'',pd||'',disc,fee||'',null,o.paid?'已付':'未付',o.ts||''];
+    const due=disc+fee,qty=row[6];
+    Object.assign(S,{qty:S.qty+qty,tot:S.tot+tot,camp:S.camp+campDisc,pd:S.pd+pd,disc:S.disc+disc,fee:S.fee+fee,due:S.due+due});
+    if(o.paid)S.paidDue+=due;else{S.unpaidDue+=due;S.unpaidN++;}
+    row.forEach((v,i)=>{
+      const st={...B,...zebra};
+      if([7,8,10,11,12].includes(i))Object.assign(st,{numFmt:'#,##0'});
+      if(i===5||i===3)Object.assign(st,{align:'left'});
+      if(i===14)Object.assign(st,{bold:true,color:o.paid?'2E7D32':'C0392B'});
+      if(i===13)t.set(r,i,{f:`L${r+1}+M${r+1}`,r:due},{...st,numFmt:'#,##0',bold:true});
+      else t.set(r,i,v,st);
+    });
+  });
+  const rS=2+list.length;
+  t.set(rS,0,'合計',totS);
+  for(let i=1;i<H.length;i++){
+    const colL=L(i);
+    const cache={6:S.qty,7:S.tot,8:S.camp,10:S.pd,11:S.disc,12:S.fee,13:S.due};
+    if([6,7,8,10,11,12,13].includes(i))t.set(rS,i,{f:`SUM(${colL}3:${colL}${rS})`,r:cache[i]},{...totS,numFmt:'#,##0'});
+    else if(i===14)t.set(rS,i,{f:`COUNTIF(O3:O${rS},"未付")&" 筆未付"`,r:`${S.unpaidN} 筆未付`},{...totS,color:'C0392B'});
+    else t.set(rS,i,'',totS);
+  }
+  // 結算
+  const kv=(r,label,f,cached,st)=>{t.set(r,11,label,{bold:true,align:'right',color:'1F2933'});t.merge(r,11,r,12);t.set(r,13,{f,r:cached},{bold:true,numFmt:'#,##0',align:'right',border:true,...(st||{})});};
+  kv(rS+2,'商品實收',`L${rS+1}`,S.disc);
+  kv(rS+3,'已收款（含運）',`SUMIF(O3:O${rS},"已付",N3:N${rS})`,S.paidDue,{color:'2E7D32'});
+  kv(rS+4,'未收款（含運）',`SUMIF(O3:O${rS},"未付",N3:N${rS})`,S.unpaidDue,{color:'C0392B'});
+  if(costRate){
+    kv(rS+5,`應付廠商（${costRate} 折）`,`'叫貨總表'!${L(cA)}${rT+4}`,payable);
+    kv(rS+6,'商品毛利',`N${rS+3}-N${rS+6}`,S.disc-payable,{fill:'E8F5E9'});
+  }
+  [12,13,10,22,8,42,6,9,9,10,9,10,7,10,10,17].forEach((w,i)=>t.width(i,w));
+  t.freeze={r:2,c:1};
+
+  const safe=String(c.name).replace(/[\\\/:*?"<>|]/g,'_');
+  KCX.download(wb.build(),`${safe}_叫貨單_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast(`已匯出「${c.name}」${list.length} 筆訂單 ✓`);
+}
+
+// ════════════════════════════════════════════════════════════
+//  訂單封存（已結束團購的訂單）— 需要時才載入
+// ════════════════════════════════════════════════════════════
+let archiveOrders=null,archiveStats={count:0,total:0},archiveSweepDone=false;
+function allOrders(){return orders.concat(archiveOrders||[]);}
+async function ensureArchive(force){
+  if(archiveOrders&&!force)return archiveOrders;
+  const data=await api('GET',{action:'getArchive'});
+  archiveOrders=data.status==='ok'?(data.orders||[]):[];
+  return archiveOrders;
+}
+// 主表裡如果還有「已結束」或「找不到團購」的訂單，自動整理到封存（每次登入最多一次）
+async function autoArchiveSweep(){
+  if(archiveSweepDone||!['root','admin'].includes(currentUser?.role))return;
+  archiveSweepDone=true;
+  const st={};campaigns.forEach(c=>{st[String(c.id)]=c.status;});
+  const stale=orders.filter(o=>st[String(o.campaignId)]===undefined||st[String(o.campaignId)]==='done');
+  if(!stale.length)return;
+  const r=await apiPost({action:'archiveSweep'});
+  if(r.status==='ok'&&r.archived){archiveOrders=null;showToast(`已將 ${r.archived} 筆已結束／舊訂單移到封存 ✓`);await loadData();}
+}
+
+// ════════════════════════════════════════════════════════════
+//  客戶名單：以手機號碼彙整所有訂單（含封存）
+// ════════════════════════════════════════════════════════════
+const CUSTOMER_RULES={vipSpend:3000,vipCampaigns:4,sleepDays:90};
+const SEG={vip:{label:'🌟 VIP',color:'#c9a84c'},regular:{label:'🔁 常客',color:'#5dca8a'},new:{label:'🆕 新客',color:'#6aa9ff'},sleep:{label:'💤 沉睡',color:'#9aa3ad'}};
+let customerCache=[];
+function buildCustomers(){
+  const campMap=Object.fromEntries(campaigns.map(c=>[String(c.id),c]));
+  const now=Date.now();
+  const map={};
+  allOrders().forEach(o=>{
+    const phone=kcOrderPhone(o.phone);if(!phone)return;
+    const cu=map[phone]||(map[phone]={phone,names:[],orders:[],camps:new Set(),spend:0,unpaid:0,items:{},cats:{},sups:new Set(),promo:'',first:'',last:''});
+    cu.orders.push(o);cu.camps.add(String(o.campaignId));
+    const amt=(parseFloat(o.discounted)||0);cu.spend+=amt;
+    if(!o.paid)cu.unpaid+=amt+(parseFloat(o.shippingFee)||0);
+    if(o.name&&!cu.names.includes(o.name))cu.names.push(o.name);
+    const camp=campMap[String(o.campaignId)];
+    const sid=camp?.supplierId||o.supplierId;if(sid)cu.sups.add(String(sid));
+    const t=String(o.ts||'');
+    if(t&&(!cu.first||t<cu.first))cu.first=t;
+    if(t&&(!cu.last||t>cu.last)){cu.last=t;cu.lastName=o.name;}
+    (o.items||[]).forEach(i=>{
+      const q=parseInt(i.qty)||0;cu.items[i.name]=(cu.items[i.name]||0)+q;
+      const cp=camp?.products?.find(p=>String(p.id)===String(i.id));
+      const ct=kcProdCat(i.name,sid,cp?.cat);cu.cats[ct]=(cu.cats[ct]||0)+q;
+    });
+  });
+  return Object.values(map).map(cu=>{
+    // 來源：最早一筆有用優惠碼的訂單
+    const byTime=[...cu.orders].sort((a,b)=>String(a.ts).localeCompare(String(b.ts)));
+    const src=byTime.find(o=>o.promoCode&&o.promoCode!=='自然流量');
+    const lastMs=cu.last?new Date(cu.last.replace(' ','T')+'+08:00').getTime():0;
+    const days=lastMs?Math.floor((now-lastMs)/86400000):999;
+    const nCamp=cu.camps.size;
+    const isVip=cu.spend>=CUSTOMER_RULES.vipSpend||nCamp>=CUSTOMER_RULES.vipCampaigns;
+    const seg=days>CUSTOMER_RULES.sleepDays?'sleep':isVip?'vip':nCamp>=2?'regular':'new';
+    const topItems=Object.entries(cu.items).sort((a,b)=>b[1]-a[1]).slice(0,3);
+    const topCats=Object.entries(cu.cats).sort((a,b)=>b[1]-a[1]).slice(0,2).map(x=>x[0]);
+    return{...cu,name:cu.lastName||cu.names[0]||'',nCamp,nOrders:cu.orders.length,avg:cu.orders.length?Math.round(cu.spend/cu.orders.length):0,
+      days,seg,isVip,topItems,topCats,source:src?src.promoCode:'自然流量'};
+  });
+}
+async function renderCustomersPage(){
+  const el=document.getElementById('customers-table');if(!el)return;
+  if(!archiveOrders){el.innerHTML='<div class="empty"><p>載入封存訂單中…</p></div>';await ensureArchive();}
+  customerCache=buildCustomers();
+  populateSupFilter('cust-filter-supplier');
+  const srcEl=document.getElementById('cust-filter-source');
+  if(srcEl){const cur=srcEl.value;const srcs=[...new Set(customerCache.map(c=>c.source))].sort();srcEl.innerHTML='<option value="">所有來源</option>'+srcs.map(s=>`<option value="${s}">${s}</option>`).join('');srcEl.value=cur;}
+  const catEl=document.getElementById('cust-filter-cat');
+  if(catEl){const cur=catEl.value;const cs=[...new Set(customerCache.flatMap(c=>Object.keys(c.cats)))].sort();catEl.innerHTML='<option value="">所有分類</option>'+cs.map(s=>`<option value="${s}">${s}</option>`).join('');catEl.value=cur;}
+  renderCustomers();
+}
+function filteredCustomers(){
+  const q=(document.getElementById('cust-search')?.value||'').toLowerCase();
+  const seg=document.getElementById('cust-filter-seg')?.value||'';
+  const sid=document.getElementById('cust-filter-supplier')?.value||'';
+  const src=document.getElementById('cust-filter-source')?.value||'';
+  const cat=document.getElementById('cust-filter-cat')?.value||'';
+  const sort=document.getElementById('cust-sort')?.value||'spend';
+  let list=customerCache.filter(c=>(!q||c.name.toLowerCase().includes(q)||c.names.some(n=>n.toLowerCase().includes(q))||c.phone.includes(q))
+    &&(!seg||(seg==='vip'?c.isVip:c.seg===seg))&&(!sid||c.sups.has(String(sid)))&&(!src||c.source===src)&&(!cat||c.cats[cat]));
+  const by={spend:(a,b)=>b.spend-a.spend,recent:(a,b)=>a.days-b.days,camps:(a,b)=>b.nCamp-a.nCamp||b.spend-a.spend,sleep:(a,b)=>b.days-a.days,unpaid:(a,b)=>b.unpaid-a.unpaid};
+  return list.sort(by[sort]||by.spend);
+}
+function renderCustomers(){
+  const list=filteredCustomers();
+  const cnt=k=>customerCache.filter(c=>k==='vip'?c.isVip:c.seg===k).length;
+  document.getElementById('cust-totals').innerHTML=
+    `<div class="tb-item"><div class="tb-label">客戶數</div><div class="tb-val">${customerCache.length}</div></div>`+
+    ['vip','regular','new','sleep'].map(k=>`<div class="tb-item" style="cursor:pointer" onclick="document.getElementById('cust-filter-seg').value='${k}';renderCustomers()"><div class="tb-label">${SEG[k].label}</div><div class="tb-val" style="color:${SEG[k].color}">${cnt(k)}</div></div>`).join('')+
+    `<div class="tb-item"><div class="tb-label">篩選結果</div><div class="tb-val">${list.length}</div></div>`;
+  const el=document.getElementById('customers-table');
+  if(!list.length){el.innerHTML='<div class="empty"><div class="empty-icon">👥</div><p>沒有符合的客戶</p></div>';return;}
+  el.innerHTML=`<table><thead><tr><th>客戶</th><th>分群</th><th>參加團購</th><th>累計消費</th><th>平均每單</th><th>最近下單</th><th>常買</th><th>來源</th><th>未收款</th></tr></thead><tbody>`+
+    list.map(c=>`<tr style="cursor:pointer" onclick="viewCustomer('${c.phone}')">
+      <td><div style="font-weight:700">${c.name}${c.names.length>1?` <span style="font-size:10px;color:var(--faint)">(+${c.names.length-1} 個名字)</span>`:''}</div><div style="font-family:monospace;font-size:11px;color:var(--muted)">${c.phone}</div></td>
+      <td><span class="badge" style="background:transparent;border:1px solid ${SEG[c.seg].color};color:${SEG[c.seg].color}">${SEG[c.seg].label}</span>${c.isVip&&c.seg!=='vip'?' <span style="font-size:10px;color:#c9a84c">VIP</span>':''}</td>
+      <td style="text-align:center">${c.nCamp}</td>
+      <td style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--gold)">$${Math.round(c.spend).toLocaleString()}</td>
+      <td>$${c.avg.toLocaleString()}</td>
+      <td style="font-size:12px">${c.last?c.last.slice(0,10):'—'}<div style="font-size:10px;color:${c.days>CUSTOMER_RULES.sleepDays?'#ff8080':'var(--faint)'}">${c.days<999?c.days+' 天前':''}</div></td>
+      <td style="font-size:11px;color:var(--muted);max-width:200px">${c.topCats.join('、')}<div style="color:var(--faint)">${c.topItems.map(x=>x[0]).join('、')}</div></td>
+      <td style="font-size:11px">${c.source}</td>
+      <td style="color:${c.unpaid>0?'#ff8080':'var(--faint)'}">${c.unpaid>0?'$'+Math.round(c.unpaid).toLocaleString():'—'}</td>
+    </tr>`).join('')+'</tbody></table>';
+}
+function viewCustomer(phone){
+  const c=customerCache.find(x=>x.phone===phone);if(!c)return;
+  const rows=[...c.orders].sort((a,b)=>String(b.ts).localeCompare(String(a.ts)));
+  document.getElementById('modal-order-body').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div><div style="font-size:18px;font-weight:700">${c.name}</div><div style="font-family:monospace;color:var(--muted)">${c.phone}</div>
+        ${c.names.length>1?`<div style="font-size:11px;color:var(--faint)">曾用名：${c.names.join('、')}</div>`:''}</div>
+      <span class="badge" style="border:1px solid ${SEG[c.seg].color};color:${SEG[c.seg].color};background:transparent">${SEG[c.seg].label}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;font-size:11px;color:var(--muted)">
+      <div>累計消費<div style="font-size:16px;color:var(--gold);font-weight:700">$${Math.round(c.spend).toLocaleString()}</div></div>
+      <div>參加團購<div style="font-size:16px;color:var(--text);font-weight:700">${c.nCamp} 次</div></div>
+      <div>第一次下單<div style="font-size:13px;color:var(--text)">${c.first.slice(0,10)||'—'}</div></div>
+      <div>來源<div style="font-size:13px;color:var(--text)">${c.source}</div></div>
+    </div>
+    <div style="font-size:12px;margin-bottom:6px;color:var(--muted)">最常買：${c.topItems.map(x=>`${x[0]}×${x[1]}`).join('、')||'—'}</div>
+    <table style="width:100%;font-size:12px"><thead><tr><th style="text-align:left">日期</th><th style="text-align:left">團購</th><th style="text-align:left">品項</th><th>金額</th><th>付款</th></tr></thead><tbody>
+    ${rows.map(o=>`<tr><td>${String(o.ts||'').slice(0,10)}</td><td>${campName(o.campaignId)||o.campaignName||'—'}</td><td style="color:var(--muted)">${(o.items||[]).map(i=>i.name+'×'+i.qty).join('、')}</td><td style="text-align:right">$${(parseFloat(o.discounted)||0).toLocaleString()}</td><td>${o.paid?'<span class="badge badge-paid">已付</span>':'<span class="badge badge-unpaid">未付</span>'}</td></tr>`).join('')}
+    </tbody></table>`;
+  document.getElementById('modal-order').classList.add('show');
+}
+function exportCustomersXLSX(){
+  const list=filteredCustomers();
+  if(!list.length){showToast('沒有可匯出的客戶','error');return;}
+  const wb=KCX.Workbook();const s=wb.addSheet('客戶名單');s.landscape=true;
+  const hd={bold:true,fill:'3F4A54',color:'FFFFFF',border:true,align:'center',borderColor:'3F4A54'};
+  const B={border:true,valign:'center'};
+  const H=['姓名','手機','分群','參加團購','訂單數','累計消費','平均每單','第一次下單','最近下單','距今天數','常買分類','常買品項','來源','未收款'];
+  H.forEach((h,i)=>s.set(0,i,h,hd));
+  list.forEach((c,k)=>{
+    const z=k%2?{fill:'F7F8FA'}:{};
+    [c.name,c.phone,SEG[c.seg].label.replace(/^\S+\s/,'')+(c.isVip&&c.seg!=='vip'?'（VIP）':''),c.nCamp,c.nOrders,Math.round(c.spend),c.avg,c.first.slice(0,10),c.last.slice(0,10),c.days<999?c.days:'',
+     c.topCats.join('、'),c.topItems.map(x=>`${x[0]}×${x[1]}`).join('、'),c.source,Math.round(c.unpaid)||'']
+     .forEach((v,i)=>s.set(k+1,i,v,{...B,...z,...([5,6,13].includes(i)?{numFmt:'#,##0',align:'right'}:{}),...(i===11?{wrap:true}:{})}));
+  });
+  [12,13,8,8,7,10,9,11,11,8,16,34,10,9].forEach((w,i)=>s.width(i,w));
+  s.freeze={r:1,c:1};
+  KCX.download(wb.build(),`KingsCorner_客戶名單_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast(`已匯出 ${list.length} 位客戶 ✓`);
+}
+
 </script>
 </body>
 </html>
